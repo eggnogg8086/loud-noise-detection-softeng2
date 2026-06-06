@@ -156,6 +156,9 @@ public class AudioProcess implements Runnable {
         hannWindowOneSecond ? FFTSignalProcessing.WINDOW_TYPE.TUKEY :
                 FFTSignalProcessing.WINDOW_TYPE.RECTANGULAR,
         PROP_SLOW_LEQ, false);
+        if (currentState == STATE.PROCESSING) {
+            new Thread(slowLeqProcessing).start();
+        }
     }
 
     private void loadFilterSlowAnalyzer() {

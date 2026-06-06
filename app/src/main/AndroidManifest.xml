@@ -1,29 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
 
     <!-- Required by Android P -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!-- Save shared file permission on private folder -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="18" />
-
-    <permission
-        android:name="org.noise_planet.noisecapture.MAPS_RECEIVE"
-        android:protectionLevel="signature" />
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -49,7 +39,7 @@
         </provider>
 
         <service android:name=".MeasurementService"
-            android:foregroundServiceType="location|microphone"
+            android:foregroundServiceType="microphone"
             />
         <service android:name=".CalibrationService" />
 
@@ -88,10 +78,6 @@
             android:exported="true"
             android:noHistory="true" />
         <activity
-            android:name=".MapActivity"
-            android:exported="true"
-            android:label="@string/title_activity_map" />
-        <activity
             android:name=".Start"
             android:label="@string/title_activity_start"
             android:noHistory="true"
@@ -103,10 +89,6 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".History"
-            android:exported="true"
-            android:label="@string/title_activity_history" />
-        <activity
             android:name=".CalibrationActivity"
             android:exported="true"
             android:label="@string/title_activity_calibration_start"
@@ -117,20 +99,7 @@
             android:label="@string/title_activity_calibration_linearity"
             android:exported="true"
             android:screenOrientation="portrait" />
-        <activity
-            android:name=".CommentActivity"
-            android:label="@string/title_activity_comment"
-            android:exported="true"
-            android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustPan" />
-        <activity
-            android:name=".PrivacyPolicyActivity"
-            android:exported="true"
-            android:label="@string/privacy_policy_title"/>
-        <activity
-            android:name=".LocalisationPolicyActivity"
-            android:exported="true"
-            android:label="@string/localisation_policy_title"/>
+
         <activity
             android:name=".CalibrationMenu"
             android:label="@string/title_activity_menu_calibration"

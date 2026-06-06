@@ -58,46 +58,13 @@ public class Start extends Activity {
         // Upgrade DB if necessary
         SQLiteDatabase database = new Storage(this).getWritableDatabase();
         database.close();
-        // If first start then create a unique identifier for this install
-        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-        if(!sharedPref.contains(MeasurementExport.PROP_UUID)) {
-            SharedPreferences.Editor editor = sharedPref.edit();
-            editor.putString(MeasurementExport.PROP_UUID, UUID.randomUUID().toString());
-            editor.apply();
-        }
-    // read app version name
-    try {
-        TextView versionText = (TextView) findViewById(R.id.textView_appversion);
-        versionText.setText(MainActivity.getVersionString(this));
-    } catch (PackageManager.NameNotFoundException ex) {
-        LOGGER.error(ex.getLocalizedMessage(), ex);
-    }
 
     thread=  new Thread(){
         @Override
         public void run(){
-            try {
-                synchronized(this){
-                    wait(3000);
-                }
-            }
-            catch(InterruptedException ex){
-            }
-
-            SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(Start.this);
-            if(!sharedPref.getBoolean(PrivacyPolicyActivity.PROP_POLICY_AGREED, false)) {
-                Intent i = new Intent(getApplicationContext(), PrivacyPolicyActivity.class);
-                startActivity(i);
-                finish();
-            } else if (!sharedPref.getBoolean(LocalisationPolicyActivity.PROP_POLICY_READ, false)) {
-                Intent i = new Intent(getApplicationContext(), LocalisationPolicyActivity.class);
-                startActivity(i);
-                finish();
-            } else {
-                Intent i = new Intent(getApplicationContext(), MeasurementActivity.class);
-                startActivity(i);
-                finish();
-            }
+            Intent i = new Intent(getApplicationContext(), MeasurementActivity.class);
+            startActivity(i);
+            finish();
         }
     };
 

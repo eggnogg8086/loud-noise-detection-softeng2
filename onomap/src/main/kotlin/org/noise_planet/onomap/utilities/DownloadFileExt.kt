@@ -28,7 +28,6 @@
 
 package org.noise_planet.onomap.utilities
 
-import org.apache.logging.log4j.core.util.FileUtils.isFile
 import org.h2gis.api.ProgressVisitor
 import java.net.HttpURLConnection
 import java.net.URL
@@ -39,7 +38,7 @@ import java.nio.file.Path
 fun URL.downloadFile(outputFile: File, progressVisitor: ProgressVisitor) {
   val progressSteps = 10000
   val connection = openConnection()
-  if(isFile(this)) {
+  if(this.protocol == "file") {
     Files.copy(Path.of(this.toURI()), Path.of(outputFile.toURI()))
   } else if(connection is HttpURLConnection) {
     connection.connect()

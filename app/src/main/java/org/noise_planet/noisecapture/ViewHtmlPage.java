@@ -97,7 +97,6 @@ public class ViewHtmlPage extends MainActivity {
 
     private void runJs() {
         final WebView webView = (WebView) findViewById(R.id.webview);
-        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
         // Load extra parameters
         String versionInfo = "";
         try {
@@ -105,8 +104,7 @@ public class ViewHtmlPage extends MainActivity {
         } catch (PackageManager.NameNotFoundException ex){
             MAINLOGGER.error(ex.getLocalizedMessage(), ex);
         }
-        String uuid = sharedPref.getString(MeasurementExport.PROP_UUID, "");
-        String content = "<h1>"+getText(R.string.app_name)+"</h1> "+versionInfo+"<br/>"+getText(R.string.user_id_activity_about)+": "+uuid;
+        String content = "<h1>"+getText(R.string.app_name)+"</h1> "+versionInfo;
         String js = "document.getElementById(\"about_title\").innerHTML = \""+content+"\"";
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             webView.evaluateJavascript(js, null);

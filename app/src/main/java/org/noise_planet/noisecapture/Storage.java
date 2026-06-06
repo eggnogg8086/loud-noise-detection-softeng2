@@ -51,9 +51,9 @@ import java.util.Date;
  */
 public class Storage extends SQLiteOpenHelper {
     // Untranslated Tags, in the same order as displayed in the layouts
-    public static final TagInfo[] TAGS_INFO = {t(0, "test", R.id.tags_measurement_conditions), t
-            (3, "indoor", R.id.tags_measurement_conditions), t(1, "rain", R.id
-            .tags_measurement_conditions), t(2, "wind", R.id.tags_measurement_conditions), t(5,
+    public static final TagInfo[] TAGS_INFO = {t(0, "test", R.id.tags_predominant_sound_sources_col1), t
+            (3, "indoor", R.id.tags_predominant_sound_sources_col1), t(1, "rain", R.id
+            .tags_predominant_sound_sources_col1), t(2, "wind", R.id.tags_predominant_sound_sources_col1), t(5,
             "chatting", R.id.tags_predominant_sound_sources_col1, R.color.tag_group_human), t(12,
             "children", R.id.tags_predominant_sound_sources_col1, R.color.tag_group_human), t(4,
             "footsteps", R.id.tags_predominant_sound_sources_col1, R.color.tag_group_human), t
@@ -110,7 +110,7 @@ public class Storage extends SQLiteOpenHelper {
         }
     }
     // If you change the database schema, you must increment the database version.
-    public static final int DATABASE_VERSION = 13;
+    public static final int DATABASE_VERSION = 14;
     public static final String DATABASE_NAME = "Storage.db";
     private static final String ACTIVATE_FOREIGN_KEY = "PRAGMA foreign_keys=ON;";
 
@@ -216,11 +216,15 @@ public class Storage extends SQLiteOpenHelper {
             }
             oldVersion = 12;
         }
-        if(oldVersion == 12) {
-            if(!db.isReadOnly()) {
-                db.execSQL("ALTER TABLE LEQ ADD COLUMN laeq FLOAT DEFAULT 0");
-            }
-            oldVersion = 13;
+        if(oldVersion == 13) {
+            // Simplification: drop and recreate tables with new schema
+            db.execSQL("DROP TABLE IF EXISTS " + LeqValue.TABLE_NAME);
+            db.execSQL("DROP TABLE IF EXISTS " + Leq.TABLE_NAME);
+            db.execSQL("DROP TABLE IF EXISTS " + RecordTag.TABLE_NAME);
+            db.execSQL("DROP TABLE IF EXISTS " + Record.TABLE_NAME);
+            db.execSQL("DROP TABLE IF EXISTS " + TrafficCalibrationSession.TABLE_NAME);
+            onCreate(db);
+            oldVersion = 14;
         }
     }
 
@@ -328,7 +332,6 @@ public class Storage extends SQLiteOpenHelper {
         public static final String TABLE_NAME = "record";
         public static final String COLUMN_ID = "record_id";
         public static final String COLUMN_UTC = "record_utc";
-        public static final String COLUMN_UPLOAD_ID = "upload_id";
         public static final String COLUMN_LEQ_MEAN = "leq_mean";
         public static final String COLUMN_TIME_LENGTH = "time_length";
         public static final String COLUMN_DESCRIPTION = "description";
@@ -342,7 +345,6 @@ public class Storage extends SQLiteOpenHelper {
 
         private int id;
         private long utc;
-        private String uploadId;
         private float leqMean;
         private int timeLength;
         private String description;
@@ -359,7 +361,6 @@ public class Storage extends SQLiteOpenHelper {
         public Record(Cursor cursor) {
             this(cursor.getInt(cursor.getColumnIndex(COLUMN_ID)),
                     cursor.getLong(cursor.getColumnIndex(COLUMN_UTC)),
-                    cursor.getString(cursor.getColumnIndex(COLUMN_UPLOAD_ID)),
                     cursor.getFloat(cursor.getColumnIndex(COLUMN_LEQ_MEAN)),
                     cursor.getInt(cursor.getColumnIndex(COLUMN_TIME_LENGTH)),
                     cursor.getFloat(cursor.getColumnIndex(COLUMN_CALIBRATION_GAIN)),
@@ -375,11 +376,10 @@ public class Storage extends SQLiteOpenHelper {
             microphoneDeviceSettings = getString(cursor, COLUMN_MICROPHONE_DEVICE_SETTINGS);
         }
 
-        public Record(int id, long utc, String uploadId, float leqMean, int timeLength,
+        public Record(int id, long utc, float leqMean, int timeLength,
                       float calibrationGain, int calibrationMethod) {
             this.id = id;
             this.utc = utc;
-            this.uploadId = uploadId;
             this.leqMean = leqMean;
             this.timeLength = timeLength;
             this.calibrationGain = calibrationGain;
@@ -432,13 +432,6 @@ public class Storage extends SQLiteOpenHelper {
         }
 
         /**
-         * @return Upload identifier, empty if not uploaded
-         */
-        public String getUploadId() {
-            return uploadId;
-        }
-
-        /**
          * @return Local storage identifier
          */
         public int getId() {
@@ -478,7 +471,6 @@ public class Storage extends SQLiteOpenHelper {
     public static final String CREATE_RECORD = "CREATE TABLE " + Record.TABLE_NAME +
             "("+Record.COLUMN_ID +" INTEGER PRIMARY KEY, " +
             Record.COLUMN_UTC +" LONG, " +
-            Record.COLUMN_UPLOAD_ID + " TEXT, " +
             Record.COLUMN_LEQ_MEAN + " FLOAT, " +
             Record.COLUMN_TIME_LENGTH + " INTEGER, " +
             Record.COLUMN_DESCRIPTION + " TEXT, " +
@@ -497,52 +489,23 @@ public class Storage extends SQLiteOpenHelper {
         public static final String COLUMN_RECORD_ID = "record_id";
         public static final String COLUMN_LEQ_ID = "leq_id";
         public static final String COLUMN_LEQ_UTC = "leq_utc";
-        public static final String COLUMN_LATITUDE = "latitude";
-        public static final String COLUMN_LONGITUDE = "longitude";
-        public static final String COLUMN_ALTITUDE = "altitude";
-        public static final String COLUMN_ACCURACY = "accuracy"; // location precision estimation
-        public static final String COLUMN_SPEED = "speed"; // device speed estimation
-        public static final String COLUMN_BEARING = "bearing"; // device orientation estimation
-        public static final String COLUMN_LOCATION_UTC = "location_utc"; // date of last obtained location
         public static final String COLUMN_LAEQ = "laeq"; // dB(A) level
 
         private int recordId;
         private int leqId;
         private long leqUtc;
-        private double latitude;
-        private double longitude;
-        private Double altitude;
-        private Float speed;
-        private Float bearing;
-        private float accuracy;
-        private long locationUTC;
         private float lAeq;
 
         /**
          * @param recordId Record id or -1 if unknown
          * @param leqId
          * @param leqUtc
-         * @param latitude
-         * @param longitude
-         * @param altitude
-         * @param speed
-         * @param bearing
-         * @param accuracy
-         * @param locationUTC
+         * @param laeq
          */
-        public Leq(int recordId, int leqId, long leqUtc, double latitude, double longitude,
-                   Double altitude, Float speed, Float bearing, float accuracy, long locationUTC,
-                   float laeq) {
+        public Leq(int recordId, int leqId, long leqUtc, float laeq) {
             this.recordId = recordId;
             this.leqId = leqId;
             this.leqUtc = leqUtc;
-            this.latitude = latitude;
-            this.longitude = longitude;
-            this.altitude = altitude;
-            this.speed = speed;
-            this.bearing = bearing;
-            this.accuracy = accuracy;
-            this.locationUTC = locationUTC;
             this.lAeq = (float)laeq;
         }
 
@@ -551,22 +514,12 @@ public class Storage extends SQLiteOpenHelper {
             this(cursor.getInt(cursor.getColumnIndex(COLUMN_RECORD_ID)),
                     cursor.getInt(cursor.getColumnIndex(COLUMN_LEQ_ID)),
                     cursor.getLong(cursor.getColumnIndex(COLUMN_LEQ_UTC)),
-                    cursor.getDouble(cursor.getColumnIndex(COLUMN_LATITUDE)),
-                    cursor.getDouble(cursor.getColumnIndex(COLUMN_LONGITUDE)),
-                    getDouble(cursor, COLUMN_ALTITUDE),
-                    getFloat(cursor, COLUMN_SPEED),
-                    getFloat(cursor, COLUMN_BEARING),
-                    cursor.getFloat(cursor.getColumnIndex(COLUMN_ACCURACY)),
-                    cursor.getLong(cursor.getColumnIndex(COLUMN_LOCATION_UTC)),
                     cursor.getFloat(cursor.getColumnIndex(COLUMN_LAEQ)));
         }
 
         public static String getAllFields(String prepend) {
             return TextUtils.join(",", new String[]{prepend + COLUMN_RECORD_ID, prepend +
-                    COLUMN_LEQ_ID, prepend + COLUMN_LEQ_UTC, prepend + COLUMN_LATITUDE, prepend +
-                    COLUMN_LONGITUDE, prepend + COLUMN_ALTITUDE, prepend + COLUMN_ACCURACY,
-                    prepend + COLUMN_SPEED, prepend + COLUMN_BEARING, prepend +
-                    COLUMN_LOCATION_UTC, prepend + COLUMN_LAEQ});
+                    COLUMN_LEQ_ID, prepend + COLUMN_LEQ_UTC, prepend + COLUMN_LAEQ});
         }
 
         public int getRecordId() {
@@ -581,40 +534,6 @@ public class Storage extends SQLiteOpenHelper {
             return leqUtc;
         }
 
-        public double getLatitude() {
-            return latitude;
-        }
-
-        public double getLongitude() {
-            return longitude;
-        }
-
-        public Double getAltitude() {
-            return altitude;
-        }
-
-        public float getAccuracy() {
-            return accuracy;
-        }
-
-        /**
-         * @return Device speed in ground m/s
-         */
-        public Float getSpeed() {
-            return speed;
-        }
-
-        /**
-         * @return Device orientation
-         */
-        public Float getBearing() {
-            return bearing;
-        }
-
-        public long getLocationUTC() {
-            return locationUTC;
-        }
-
         public float getLAeq() {
             return lAeq;
         }
@@ -624,13 +543,6 @@ public class Storage extends SQLiteOpenHelper {
             Leq.COLUMN_RECORD_ID + " INTEGER, " +
             Leq.COLUMN_LEQ_ID + " INTEGER PRIMARY KEY, " +
             Leq.COLUMN_LEQ_UTC + " LONG, " +
-            Leq.COLUMN_LATITUDE + " DOUBLE, " +
-            Leq.COLUMN_LONGITUDE + " DOUBLE, " +
-            Leq.COLUMN_BEARING + " FLOAT, " +
-            Leq.COLUMN_ALTITUDE + " DOUBLE, " +
-            Leq.COLUMN_SPEED + " FLOAT, " +
-            Leq.COLUMN_ACCURACY + " FLOAT, " +
-            Leq.COLUMN_LOCATION_UTC + " LONG, " +
             Leq.COLUMN_LAEQ + " FLOAT, " +
             "FOREIGN KEY(" + Leq.COLUMN_RECORD_ID + ") REFERENCES record("+Record.COLUMN_ID+") ON DELETE CASCADE)";
 

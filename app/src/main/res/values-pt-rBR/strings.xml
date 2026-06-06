@@ -18,14 +18,7 @@
     <string name="calibration_cancel_change">Cancelar</string>
     <string name="fail_share">Geração do arquivo compartilhado falhou</string>
     <string name="no_results">Não há resultados. Comece uma gravação antes.</string>
-    <string name="no_gps_results">Não há coordenadas GPS nesta gravação</string>
-    <string name="no_gps_hint">Sem GPS</string>
-    <string name="gps_hint_precision">%1$d m</string>
-    <string name="loc_hint">Indicação do status da posição</string>
     <string name="permission_explain_audio_record">NoiseCapture requer permissão de uso do microfone para medições de áudio</string>
-    <string name="permission_explain_gps">NoiseCapture requer posição GPS para posicionamento de níveis de ruído no mapa</string>
-    <string name="permission_explain_access_wifi_state">NoiseCapture requer permissão de acesso
- ao status do wifi para não transferir dados se o dispositivo não estiver conectado via wifi</string>
 
     <string name="title_menu">Menu</string>
     <string name="title_service_measurement">Medição</string>
@@ -58,10 +51,6 @@
     <string name="setting_general_group">Geral</string>
     <string name="setting_measurement_group">Medição</string>
     <string name="setting_calibration_group">Calibração</string>
-    <string name="title_settings_data_transfer">Transferência de dados</string>
-    <string name="summary_settings_data_transfer">Transferência automática de medições</string>
-    <string name="title_settings_transfer_wifi_only">Apenas wifi</string>
-    <string name="summary_settings_transfer_wifi_only">Transferência automática apenas por wifi</string>
     <string name="title_settings_recording">Gravando</string>
     <string name="summary_settings_recording">Configurar tempo máximo de gravação</string>
     <string name="title_settings_caution">Mensagem de alerta</string>
@@ -87,7 +76,6 @@
     <string name="measurement_dba_la90">LA90</string>
     <string name="measurement_tab_spectrum">Espectro</string>
     <string name="measurement_tab_spectrogram">Espectrograma</string>
-    <string name="measurement_tab_map">Mapa</string>
 
     <!--  Ressources for the spinner calibration !-->
 
@@ -107,18 +95,12 @@
     <!--  Ressources for the Drawer and option menu !-->
     <string-array name="dm_list_array">
         <item>Medição</item>
-        <item>Descrição</item>
         <item>Resultados</item>
-        <item>Histórico</item>
-        <item>Mapa</item>
         <item>Calibração</item>
         <item>Ajuda</item>
         <item>Sobre</item>
     </string-array>
     <string name="result_share">Compartilhar este resultado</string>
-    <string name="result_button_map">Mostrar mapa</string>
-    <string name="result_button_upload">Enviar para o servidor</string>
-    <string name="result_tooltip_minsl">Nível de ruído mínimo A-ponderado, 1 segundo</string>
     <string name="result_tooltip_maxsl">Nível de ruído máximo A-ponderado, 1 segundo</string>
     <string name="result_tooltip_la10">LA10: nível de ruído A-ponderado excedido durante 10% do
  período de medição. LA10 é útil para quantificar o ruído do tráfego em rodovias, o qual está correlacionado à perturbação causada pelo ruído.</string>
@@ -183,20 +165,15 @@
     <string name="start_text_subtitle">Medindo seu ambiente sonoro</string>
     <string name="start_text_developed_by">Desenvolvido por</string>
     <string name="start_text_supported_by">Suportado por</string>
-    <string name="upload_progress_title">Enviando para o servidor&#8230;</string>
-    <string name="upload_progress_message">Enviando medição para o servidor</string>
 
     <string name="history_length">%d s</string>
     <string name="history_date">- %s</string>
-    <string name="history_already_uploaded">Esta medição já foi enviada para o servidor</string>
     <string name="history_sel">%.01f dB(A)</string>
-    <string name="history_upload_top">Enviar para o servidor</string>
-    <string name="history_uploadeddescr">Este resultado foi enviado para a base de dados da comunidade?</string>
 
     <string name="measurement_processlastsamples">Processando as %d amostras restantes&#8230;</string>
     <string name="history_item_choice_title">Medição %s</string>
     <string name="calibration_select_frequency">Escolha a frequência a ser mostrada</string>
-    <string name="local_service_started">Serviço de localização iniciado</string>
+    <string name="local_service_started">Measurement service started</string>
     <string name="measurement_service_disconnected">Serviço de medição desconectado</string>
     <string name="measurement_pause">Medição pausada</string>
     <string name="delete">Excluir</string>
@@ -263,9 +240,6 @@ track.geojson Arquivo com amostras das medições, 1s. Formato geojson  (http://
     <string name="share_message">Estou medindo %.01f dB(A) usando #NoiseCapture</string>
     <string name="summary_settings_measurement_display_window">Função de janela para medição em tempo real (não é usada no resultado final)</string>
     <string name="title_settings_measurement_display_window">Janela de tempo real</string>
-    <string name="title_settings_map_maxmarker">Limites de medição apresentados</string>
-    <string name="summary_settings_map_maxmarker">Número máximo de medições mostradas no mapa (0 para todas as medições)</string>
-    <string name="map_title_progress_loading">Carregando posição das medições</string>
     <string name="policy_legal_age">Tenho idade legal para usar este aplicativo</string>
     <string name="policy_agree_statement">Concordo com a Política de Privacidade do NoiseCapture</string>
     <string name="policy_button_continue">Continuar</string>
@@ -273,8 +247,6 @@ track.geojson Arquivo com amostras das medições, 1s. Formato geojson  (http://
     <string name="privacy_policy_title">Política de Privacidade</string>
     <string name="notification_record_content">Medição em progresso...</string>
     <string name="result_title_progress_loading">Carregando as medições</string>
-    <string name="userinfo_tags_measurement_conditions">Condições de medição</string>
-    <string name="notification_goto_community_map_title">Medições da comunidade</string>
 
     <string-array name="output_mode_labels">
         <item>Chamada de voz</item>
@@ -290,12 +262,6 @@ track.geojson Arquivo com amostras das medições, 1s. Formato geojson  (http://
         <item>Hann</item>
     </string-array>
     <string name="notification_goto_community_map">Visite http://noise-planet.org e explore o mapa com todas as medições feitas pela comunidade</string>
-    <string name="title_settings_notification_links">Notificação</string>
-    <string name="summary_settings_notification_links">Marque para apresentar o link de notificação ao site do projeto Noise-Planet</string>
-    <string name="settings_category_profile">Perfil do usuário</string>
-    <string name="title_settings_user_noise_knowledge">Perfil do usuário</string>
-    <string name="settings_user_noise_knowledge_description">Como avalia seu conhecimento sobre ambientes sonoros?</string>
-    <string name="hint_userinput_noiseparty_tag">Código da NoiseCapture Party</string>
     <string-array name="knowledge">
         <item>Não tenho conhecimento no campo do ruído</item>
         <item>Tenho algum conhecimento no campo do ruído</item>
@@ -331,7 +297,4 @@ track.geojson Arquivo com amostras das medições, 1s. Formato geojson  (http://
     <string name="calibration_estimated_gain">Ganho %.2f dB(A)</string>
     <string name="calibration_awaiting_vehicle_passby">Aguardando veículo passar</string>
     <string name="calibration_done_vehicle_passby">Fim da sessão de calibração, pressione o botão abaixo</string>
-    <string name="localisation_policy_title" >Sua posição</string>
-    <string name="localisation_policy_webpage">file:///android_asset/html/localisation_notice.html</string>
-    <string name="policy_button_understood">Reconhecer</string>
     </resources>

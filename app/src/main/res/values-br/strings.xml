@@ -18,14 +18,7 @@
     <string name="calibration_cancel_change">Nullañ</string>
     <string name="fail_share">C\'hwitet ez eus bet war c\'heneladur ar restr rannet</string>
     <string name="no_results">N\'eus disoc\'h ebet. Krogit gant un enrolladenn a-raok.</string>
-    <string name="no_gps_results">Daveenn GPS ebet e-barzh an enrolladenn-mañ</string>
-    <string name="no_gps_hint">GPS ebet</string>
-    <string name="gps_hint_precision">%1$d m</string>
-    <string name="loc_hint">Titenn diwar-benn statud al lec\'hiadur</string>
     <string name="permission_explain_audio_record">NoiseCapture a rekis ur mikrofon hag a implij un aotre evit muzulioù aodio</string>
-    <string name="permission_explain_gps">NoiseCapture a rekis ul lec\'hiadur GPS evit lec\'helaat al live war ar gartenn</string>
-    <string name="permission_explain_access_wifi_state">NoiseCapture a rekis un aotren da dizhout
-        ar statud wifi evit chom hep treuzkas roadennoù ma n\'hoc\'h ket kevreet en ur implij ar wifi</string>
 
     <string name="title_menu">Lañser</string>
     <string name="title_service_measurement">Muzul</string>
@@ -58,10 +51,6 @@
     <string name="setting_general_group">Hollek</string>
     <string name="setting_measurement_group">Muzul</string>
     <string name="setting_calibration_group">Stalonadur</string>
-    <string name="title_settings_data_transfer">Treuzkasadenn roadennoù</string>
-    <string name="summary_settings_data_transfer">Em-zreuskasadenn ar muzulioù</string>
-    <string name="title_settings_transfer_wifi_only">Wifi hepken</string>
-    <string name="summary_settings_transfer_wifi_only">Em-zreuskasadenn dre ar wifi hepken</string>
     <string name="title_settings_recording">Oc\'h enrollañ</string>
     <string name="summary_settings_recording">Lakait an amzer enrollañ maksimom</string>
     <string name="title_settings_caution">Gerig kemenniñ</string>
@@ -87,7 +76,6 @@
     <string name="measurement_dba_la90">LA90</string>
     <string name="measurement_tab_spectrum">Spektrom</string>
     <string name="measurement_tab_spectrogram">Spektrogram</string>
-    <string name="measurement_tab_map">Kartenn</string>
 
     <!--  Ressources for the spinner calibration !-->
 
@@ -107,18 +95,12 @@
     <!--  Ressources for the Drawer and option menu !-->
     <string-array name="dm_list_array">
         <item>Muzul</item>
-        <item>Deskrivadur</item>
         <item>Disoc\'hoù</item>
-        <item>Rol-Istor</item>
-        <item>Kartenn</item>
         <item>Stalonadur</item>
         <item>Skoazell</item>
         <item>Diwar-benn</item>
     </string-array>
     <string name="result_share">Rannañ an disoc\'h-mañ</string>
-    <string name="result_button_map">Diskouez ar gartenn</string>
-    <string name="result_button_upload">Uskargañ</string>
-    <string name="result_tooltip_minsl">1 eilenn minimom a live trouz dazpouezel</string>
     <string name="result_tooltip_maxsl"> 1 eilenn maksimom a live trouz dazpouezel</string>
     <string name="result_tooltip_la10">LA10: Live an trouz dazpouezet dibasaet eus 10% evit ar
           mare muzuliañ. LA10 a zo un deskriver trouz trafik a zo war an hent servijus-kenañ, liammet eo gant an trouz.</string>
@@ -183,15 +165,10 @@
     <string name="start_text_subtitle">O vuzuliañ son hoc\'h endro</string>
     <string name="start_text_developed_by">Diorroet gant</string>
     <string name="start_text_supported_by">Degemeret gant</string>
-    <string name="upload_progress_title">Oc\'h uskargañ&#8230;</string>
-    <string name="upload_progress_message">Uskargañ ar muzul</string>
 
     <string name="history_length">%d s</string>
     <string name="history_date">- %s</string>
-    <string name="history_already_uploaded">Ar muzul-mañ a zo uskarget endeo</string>
     <string name="history_sel">%.01f dB(A)</string>
-    <string name="history_upload_top">Uskargañ</string>
-    <string name="history_uploadeddescr">Hag uskarget eo bet an disoc\'h-mañ e-barzh diaz-roadennoù ar gumuniezh?</string>
 
     <string name="measurement_processlastsamples">Tretadur a chom %d standilhon&#8230;</string>
     <string name="history_item_choice_title">Muzul %s</string>
@@ -260,9 +237,6 @@ roudenn.geojson 1s standilhonoù eus ar muzulioù. Ober gant ar stumm geojson (h
     <string name="share_message">Muzuliañ a ran %.01f dB(A) en ur ober gant #NoiseCapture @Noise_Planet</string>
     <string name="summary_settings_measurement_display_window">Arc\'hweladur ar prenestr evit ar muzuliadenn en amzer wirion (nann-implijet evit an disoc\'h er fin)</string>
     <string name="title_settings_measurement_display_window">Prenestr en amzer wirion</string>
-    <string name="title_settings_map_maxmarker">Bevennoù ar muzulioù diskouezet</string>
-    <string name="summary_settings_map_maxmarker">Niver a vuzulioù maksimom diskouezet war ar gartenn (0 evit an holl vuzulioù)</string>
-    <string name="map_title_progress_loading">O kargañ lec\'hiadurioù ar muzulioù</string>
     <string name="policy_legal_age">Bez em eus an oad rekiset evit ober gant an arload-mañ</string>
     <string name="policy_agree_statement">Sevel a ran a-du gant Politikerezh Prevezded NoiseCapture</string>
     <string name="policy_button_continue">Kenderc\'hel</string>
@@ -270,8 +244,6 @@ roudenn.geojson 1s standilhonoù eus ar muzulioù. Ober gant ar stumm geojson (h
     <string name="privacy_policy_title">Politikerezh ar Vuhez Prevez</string>
     <string name="notification_record_content">Muzuliadenn war ober...</string>
     <string name="result_title_progress_loading">O kargañ ar muzulioù</string>
-    <string name="userinfo_tags_measurement_conditions">Divizoù ar muzulioù</string>
-    <string name="notification_goto_community_map_title">Muzulioù ar gumuniezh</string>
 
     <string-array name="output_mode_labels">
         <item>Pellgomzadenn</item>
@@ -287,12 +259,6 @@ roudenn.geojson 1s standilhonoù eus ar muzulioù. Ober gant ar stumm geojson (h
         <item>Hann</item>
     </string-array>
     <string name="notification_goto_community_map">Gweladennit http://noise-planet.org, merdeit war kartenn an holl vuzuliadennoù bet graet gant ar gumuniezh</string>
-    <string name="title_settings_notification_links">Kemennoù</string>
-    <string name="summary_settings_notification_links">Kochit evit diskouez al liamm kemmennoù betek lec\'hienn Noise-Planet</string>
-    <string name="settings_category_profile">Profil an implijer</string>
-    <string name="title_settings_user_noise_knowledge">Profil an implijer</string>
-    <string name="settings_user_noise_knowledge_description">Penaos e rit evit priziañ ho kouizigezhioù war sonioù an endro?</string>
-    <string name="hint_userinput_noiseparty_tag">Kod party NoiseCapture</string>
     <string-array name="knowledge">
         <item>N\'am eus gouiziegezh ebet er vaezienn drouz</item>
         <item>Bez em un darn a ouiziegezhioù er vaezienn drouz</item>

@@ -18,13 +18,7 @@
     <string name="calibration_cancel_change">Annullà</string>
     <string name="fail_share">A creazione di u schedariu di dati hè fiascata</string>
     <string name="no_results">Nisunu risultatu da affissà. Effettuà una prima misura.</string>
-    <string name="no_gps_results">Ùn ci sò micca dati GPS nantu à stu registramentu </string>
-    <string name="no_gps_hint">Nisunu signale GPS</string>
-    <string name="gps_hint_precision">%1$d m</string>
-    <string name="loc_hint">Statutu di a lucalizazione GPS</string>
     <string name="permission_explain_audio_record">L\'adopru di NoiseCapture necessiteghja diritti d\'arregistramentu àudiu.</string>
-    <string name="permission_explain_gps">L\'adopru di NoiseCapture necessiteghja diritti di lucalizazione.</string>
-    <string name="permission_explain_access_wifi_state">L\'adopru di NoiseCapture necessiteghja diritti nant\'à u statu di u wifi per pudè trasferisce i dati solu cù u wifi</string>
 
     <string name="title_menu">Listinu</string>
     <string name="title_service_measurement">Misura</string>
@@ -57,10 +51,6 @@
     <string name="setting_general_group">Generale</string>
     <string name="setting_measurement_group">Misura</string>
     <string name="setting_calibration_group">Calibrera</string>
-    <string name="title_settings_data_transfer">Trasferimentu di dati</string>
-    <string name="summary_settings_data_transfer">Trasferimentu automàticu di e misure</string>
-    <string name="title_settings_transfer_wifi_only">Solu cù u Wifi</string>
-    <string name="summary_settings_transfer_wifi_only">Trasferimentu automàticu solu per Wifi</string>
     <string name="title_settings_recording">Registramentu</string>
     <string name="summary_settings_recording">Impone una durata màssima di registramentu</string>
     <string name="title_settings_caution">Accennu di cautella</string>
@@ -86,7 +76,6 @@
     <string name="measurement_dba_la90">LA90</string>
     <string name="measurement_tab_spectrum">Spettru</string>
     <string name="measurement_tab_spectrogram">Spettrugramma</string>
-    <string name="measurement_tab_map">Carta</string>
 
     <!--  Ressources for the spinner calibration !-->
 
@@ -106,18 +95,12 @@
     <!--  Ressources for the Drawer and option menu !-->
     <string-array name="dm_list_array">
         <item>Misura</item>
-        <item>Descrizzione</item>
         <item>Risultati</item>
-        <item>Stòricu</item>
-        <item>Carta</item>
         <item>Calibrera</item>
         <item>Aiutu</item>
         <item>À prupòsitu</item>
     </string-array>
     <string name="result_share">Sparte stu risultatu</string>
-    <string name="result_button_map">Carta</string>
-    <string name="result_button_upload">Mandà</string>
-    <string name="result_tooltip_minsl">Nivellu sunoru equivalente LAeq (1 segonda) mìnimu</string>
     <string name="result_tooltip_maxsl">Nivellu sunoru equivalente LAeq (1 segonda) màssimu</string>
     <string name="result_tooltip_la10">LA10: nivellu sunoru punderatu francatu durante 10% di u tempu. Per esempiu, u LA10 hè ligatu à u rombu d\'una strada, è traduce un incòmudu.</string>
     <string name="result_tooltip_la50">LA50: nivellu sunoru punderatu francatu durante 50% di u tempu. U LA50 si pò intende da nivellu sonore \"mezanu\".</string>
@@ -179,20 +162,15 @@
     <string name="start_text_subtitle">Misurà u vostru ambiente sonoru</string>
     <string name="start_text_developed_by">Fattu da</string>
     <string name="start_text_supported_by">Cù u sustegnu di</string>
-    <string name="upload_progress_title">Trasferimentu&#8230;</string>
-    <string name="upload_progress_message">Trasferiementu di a misura</string>
 
     <string name="history_length">%d s</string>
     <string name="history_date">- %s</string>
-    <string name="history_already_uploaded">Sta misura hè digià stata trasferita</string>
     <string name="history_sel">%.01f dB(A)</string>
-    <string name="history_upload_top">Trasferimentu</string>
-    <string name="history_uploadeddescr">Hè statu trasferitu ver di a cumunità stu risultatu?</string>
 
     <string name="measurement_processlastsamples">Trattamentu di i %d ùltimi campioni&#8230;</string>
     <string name="history_item_choice_title">Misura %s</string>
     <string name="calibration_select_frequency">Scelta di a frequenza da affissà</string>
-    <string name="local_service_started">Uffìziu di lucalizazione lanciatu</string>
+    <string name="local_service_started">Measurement service started</string>
     <string name="measurement_service_disconnected">Serviziu di misura scunnettatu</string>
     <string name="measurement_pause">Misura in pàusa</string>
     <string name="delete">Sguassà</string>
@@ -259,17 +237,12 @@ track.geojson: scadìglie misurate ogni segonda aduprendu u furmatu geojson (htt
     <string name="share_message">Aghju misuratu %.01f db(A) cù #NoiseCapture</string>
     <string name="summary_settings_measurement_display_window">Finestra per a misura in corsu (ùn serà micca aduprata per l\'affissu di i risultati finali)</string>
     <string name="title_settings_measurement_display_window">Finestra</string>
-    <string name="title_settings_map_maxmarker">Nùmeru màssimu di misure da affissà</string>
-    <string name="summary_settings_map_maxmarker">Nùmeru màssimu di misure da affissà indè una carta (0 per tutte e misure)</string>
-    <string name="map_title_progress_loading">Caricamentu di i dati</string>
     <string name="policy_legal_age">Aghju l\'età legale per aduprà st\'appiecazione</string>
     <string name="policy_agree_statement">Aghju lettu è sò d\'accunsentu cù a pulìtica di cunfidenzialità</string>
     <string name="policy_button_continue">Seguente</string>
     <string name="privacy_policy_webpage">file:///android_asset/html/privacy_policy_FR.html</string>
     <string name="privacy_policy_title">Pulìtica di cunfidenzialità</string>
     <string name="result_title_progress_loading">Caricamentu di i dati</string>
-    <string name="userinfo_tags_measurement_conditions">Cundizioni di misura</string>
-    <string name="notification_goto_community_map_title">Misure di a cumunità</string>
 
     <string-array name="output_mode_labels">
         <item>Telefunata</item>
@@ -285,12 +258,6 @@ track.geojson: scadìglie misurate ogni segonda aduprendu u furmatu geojson (htt
         <item>Hann</item>
     </string-array>
     <string name="notification_goto_community_map">Andate à vede http://noise-planet.org, è à percorre a carta cun tutte e misure fatte da a cumunità</string>
-    <string name="title_settings_notification_links">Nutificazione</string>
-    <string name="summary_settings_notification_links">Selezziunà per affissà a nutilicazione di u lìgame ver di a pàgina Noise-Planet</string>
-    <string name="settings_category_profile">Prufilu di l\'usadore</string>
-    <string name="title_settings_user_noise_knowledge">Prufilu di l\'usadore</string>
-    <string name="settings_user_noise_knowledge_description">Qualesse sò, segondu voi, e vostre cunniscenze indè u duminiu di u sonu?</string>
-    <string name="hint_userinput_noiseparty_tag">Còdice Noiseapture Party</string>
     <string-array name="knowledge">
         <item>Ùn aghju nisuna cunniscenza indè u duminiu di u sonu.</item>
         <item>Aghju qualchì cunniscenza indè u duminiu di u sonu.</item>

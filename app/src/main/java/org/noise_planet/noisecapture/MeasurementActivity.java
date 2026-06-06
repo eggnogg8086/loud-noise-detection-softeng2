@@ -39,7 +39,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Color;
-import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -90,7 +89,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class MeasurementActivity extends MainActivity implements
-        SharedPreferences.OnSharedPreferenceChangeListener, MapFragment.MapFragmentAvailableListener {
+        SharedPreferences.OnSharedPreferenceChangeListener{
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MeasurementActivity.class);
     private static final int MAXIMUM_PERMISSION_QUERY = 5;
@@ -100,22 +99,10 @@ public class MeasurementActivity extends MainActivity implements
     // For the Charts
     protected HorizontalBarChart mChart; // VUMETER representation
     private DoProcessing doProcessing;
-    private ImageButton buttonRecord;
-    private ImageButton buttonPause;
     private ViewPagerExt viewPager;
     private static final int PAGE_SPECTRUM = 0;
     private static final int PAGE_SPECTROGRAM = 1;
-    private static final int PAGE_MAP = 2;
-    // From this accuracy the location hint color is orange
-    private static final float APPROXIMATE_LOCATION_ACCURACY = 10.f;
-    private static final double MINIMAL_DISTANCE_RESTORE_MAP = 3.f;
-    private static final int MAX_LOCATIONS_RESTORE_MAP = 500;
-
-    // Other resources
     private boolean mIsBound = false;
-    private long lastMapLocationRefresh = 0;
-    // Map user location refresh rate in milliseconds
-    private static final long REFRESH_MAP_LOCATION_RATE = 1000;
     private AtomicBoolean chronometerWaitingToStart = new AtomicBoolean(false);
 
     public final static double MIN_SHOWN_DBA_VALUE = 20;
@@ -170,40 +157,14 @@ public class MeasurementActivity extends MainActivity implements
         }
     }
 
-    private WebView getMap() {
-        View view = ((ViewPagerAdapter)viewPager.getAdapter()).getItem(PAGE_MAP).getView();
-        if(view != null) {
-            return (WebView) view.findViewById(R.id.measurement_webmapview);
-        } else {
-            return null;
-        }
-    }
-
-    private MapFragment getMapControler() {
-        return (MapFragment) (((ViewPagerAdapter)viewPager.getAdapter()).getItem(PAGE_MAP));
-    }
-
     private void setupViewPager(ViewPagerExt viewPager) {
         ViewPagerAdapter adapter = new ViewPagerAdapter(getSupportFragmentManager());
         adapter.addFragment(new MeasurementSpectrumFragment(), getString(R.string.measurement_tab_spectrum));
         adapter.addFragment(new MeasurementSpectrogramFragment(), getString(R.string.measurement_tab_spectrogram));
-        MapFragment mapFragment = new MapFragment();
-        mapFragment.setMapFragmentAvailableListener(this);
-        adapter.addFragment(mapFragment, getString(R.string.measurement_tab_map));
-        // Give full control of swipe to the map instead of the tabs controller.
-        viewPager.addIgnoredTab(2);
+
         viewPager.setAdapter(adapter);
     }
 
-    @Override
-    public void onMapFragmentAvailable(MapFragment mapFragment) {
-        mapFragment.loadUrl("file:///android_asset/html/map_measurement.html");
-    }
-
-    @Override
-    public void onPageLoaded(MapFragment mapFragment) {
-        // Nothing to do
-    }
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
@@ -249,8 +210,7 @@ public class MeasurementActivity extends MainActivity implements
         hasMaximalMeasurementTime = sharedPref.getBoolean(HAS_MAXIMAL_MEASURE_TIME_SETTING,
                 false);
         maximalMeasurementTime = getInteger(sharedPref, MAXIMAL_MEASURE_TIME_SETTING, DEFAULT_MAXIMAL_MEASURE_TIME_SETTING);
-        if (CheckNbRunSettings && CheckNbRun("NbRunMaxCaution", getResources().getInteger(R.integer
-                .NbRunMaxCaution))) {
+        if (CheckNbRunSettings) {
             new AlertDialog.Builder(this).setTitle(R.string.title_caution)
                     .setMessage(R.string.text_caution)
                     .setNeutralButton(R.string.text_OK, null)
@@ -258,35 +218,19 @@ public class MeasurementActivity extends MainActivity implements
                     .show();
         }
 
-        // Enabled/disabled buttons
-        buttonPause = (ImageButton) findViewById(R.id.pauseBtn);
-        buttonPause.setEnabled(false);
-
-        // To start a record (test mode)
-        buttonRecord = (ImageButton) findViewById(R.id.recordBtn);
-        buttonRecord.setImageResource(R.drawable.button_record_normal);
-        buttonRecord.setEnabled(true);
-
         // Actions on record button
         doProcessing = new DoProcessing(this);
-        buttonRecord.setOnClickListener(doProcessing);
-
-        // Action on cancel button (during recording)
-        buttonPause.setOnClickListener(onButtonPause);
-        buttonPause.setOnTouchListener(new ToggleButtonTouch(this));
 
         // Init tabs (Spectrum, Spectrogram, Map)
 
-        viewPager = (ViewPagerExt) findViewById(R.id.measurement_viewpager);
+        viewPager = findViewById(R.id.measurement_viewpager);
         setupViewPager(viewPager);
-        TabLayout tabLayout = (TabLayout) findViewById(R.id.measurement_tabs);
+        TabLayout tabLayout = findViewById(R.id.measurement_tabs);
         tabLayout.setupWithViewPager(viewPager);
-        // Select map by default
-        viewPager.setCurrentItem(2);
         // Instantaneous sound level VUMETER
         // Stacked bars are used for represented Min, Current and Max values
         // Horizontal barchart
-        mChart = (HorizontalBarChart) findViewById(R.id.vumeter);
+        mChart = findViewById(R.id.vumeter);
         mChart.setTouchEnabled(false);
 
         initVueMeter();
@@ -294,7 +238,6 @@ public class MeasurementActivity extends MainActivity implements
         // Legend: hide all
         Legend lv = mChart.getLegend();
         lv.setEnabled(false); // Hide legend
-
     }
 
     @Override
@@ -302,7 +245,7 @@ public class MeasurementActivity extends MainActivity implements
                                            String permissions[], int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         switch (requestCode) {
-            case PERMISSION_RECORD_AUDIO_AND_GPS: {
+            case PERMISSION_RECORD_AUDIO: {
                 // If request is cancelled, the result arrays are empty.
                 for(int permissionId = 0; permissionId < permissions.length; permissionId++) {
                     if(permissions[permissionId].equals(Manifest.permission.RECORD_AUDIO)) {
@@ -321,65 +264,12 @@ public class MeasurementActivity extends MainActivity implements
                                 checkAndAskPermissions();
                             }
                         }
-                    } else if(permissions[permissionId].equals(Manifest.permission.ACCESS_FINE_LOCATION)) {
-                        // If accepted, request background location
-                        if(grantResults[permissionId] == PackageManager.PERMISSION_GRANTED) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                ActivityCompat.requestPermissions(this,
-                                        new String[]{Manifest.permission.FOREGROUND_SERVICE_LOCATION},
-                                        PERMISSION_RECORD_AUDIO_AND_GPS);
-                            }
-                        } else {
-                            // permission denied
-                            if(permissionFailCount.getAndAdd(1) > MAXIMUM_PERMISSION_QUERY) {
-                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                Uri uri = Uri.fromParts("package", getApplicationContext().getPackageName(), null);
-                                intent.setData(uri);
-                                startActivity(intent);
-                            } else {
-                                ActivityCompat.requestPermissions(this,
-                                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                                        PERMISSION_RECORD_AUDIO_AND_GPS);
-                            }
-                        }
                     }
                 }
             }
         }
     }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-        checkTransferResults();
-    }
-
-    private View.OnClickListener onButtonPause = new View.OnClickListener() {
-        @Override
-        public void onClick(View view) {
-            // Stop measurement without waiting for the end of processing
-            measurementService.setPause(!measurementService.isPaused());
-            chronometerWaitingToStart.set(true);
-            MeasurementActivity.this.runOnUiThread(new UpdateText(MeasurementActivity.this));
-        }
-    };
-
-    private static class ToggleButtonTouch implements View.OnTouchListener {
-        MeasurementActivity measurement;
-
-        public ToggleButtonTouch(MeasurementActivity measurement) {
-            this.measurement = measurement;
-        }
-
-        @Override
-        public boolean onTouch(View v, MotionEvent event) {
-            if(event.getAction() == MotionEvent.ACTION_DOWN) {
-                v.setPressed(!measurement.measurementService.isPaused());
-                v.performClick();
-            }
-            return true;
-        }
-    }
 
 
 
@@ -522,7 +412,7 @@ public class MeasurementActivity extends MainActivity implements
                 activity.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Intent ir = new Intent(activity.getApplicationContext(), CommentActivity.class);
+                        Intent ir = new Intent(activity.getApplicationContext(), Results.class);
                         ir.putExtra(MainActivity.RESULTS_RECORD_ID,
                                 activity.measurementService.getRecordId());
                         ir.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -568,42 +458,19 @@ public class MeasurementActivity extends MainActivity implements
         }
         // Update buttons: cancel enabled; record button to stop;
         // Show start measure hint
-        TextView overlayMessage = (TextView) findViewById(R.id.textView_message_overlay);
+        TextView overlayMessage = findViewById(R.id.textView_message_overlay);
 
         initComponents();
         if (measurementService.isStoring()) {
             overlayMessage.setVisibility(View.INVISIBLE);
-            buttonPause.setEnabled(true);
-            buttonRecord.setImageResource(R.drawable.button_record_pressed);
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
             // Start chronometer
             chronometerWaitingToStart.set(true);
-
-            MeasurementManager measurementManager = new MeasurementManager(this);
-
-            MapFragment mapFragment = getMapControler();
-            if(mapFragment != null) {
-                List<MeasurementManager.LeqBatch> locations = measurementManager
-                        .getRecordLocations(measurementService.getRecordId(), true, MAX_LOCATIONS_RESTORE_MAP, null,
-                                MINIMAL_DISTANCE_RESTORE_MAP);
-                mapFragment.cleanMeasurementPoints();
-                for(MeasurementManager.LeqBatch location : locations) {
-                    Storage.Leq leq = location.getLeq();
-                    String htmlColor = MeasurementExport.getColorFromLevel
-                            (location.computeGlobalLAeq());
-                    mapFragment.addMeasurement(new MapFragment.LatLng(leq.getLatitude(), leq
-                            .getLongitude()), htmlColor);
-                }
-            }
         }
         else
         {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            // Enabled/disabled buttons after measurement
-            buttonPause.setEnabled(false);
-            buttonRecord.setImageResource(R.drawable.button_record);
-            buttonRecord.setEnabled(true);
             // Stop and reset chronometer
             Chronometer chronometer = (Chronometer) findViewById(R.id.chronometer_recording_time);
             chronometer.stop();
@@ -653,25 +520,11 @@ public class MeasurementActivity extends MainActivity implements
             } else if(AudioProcess.PROP_SLOW_LEQ.equals(event.getPropertyName())) {
                 if(activity.hasMaximalMeasurementTime && activity.measurementService.isStoring() &&
                         activity.maximalMeasurementTime <= activity.measurementService.getLeqAdded()) {
-                    activity.runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            activity.buttonRecord.performClick();
-                        }
-                    });
                 }
             }
             else if(MeasurementService.PROP_NEW_MEASUREMENT.equals(event.getPropertyName())) {
                 if(BuildConfig.DEBUG) {
                     LOGGER.info("Measure offset {} ms", activity.measurementService.getAudioProcess().getFastNotProcessedMilliseconds());
-                }
-                final MeasurementService.MeasurementEventObject measurement = (MeasurementService.MeasurementEventObject) event.getNewValue();
-                if(!(Double.compare(measurement.leq.getLatitude(), 0) == 0 && Double.compare(measurement.leq.getLongitude(), 0) == 0)) {
-                    activity.runOnUiThread(() -> {
-                        String htmlColor = MeasurementExport.getColorFromLevel
-                                (measurement.measure.getGlobaldBaValue());
-                        activity.getMapControler().addMeasurement(new MapFragment.LatLng(measurement.leq.getLatitude(), measurement.leq.getLongitude()), htmlColor);
-                    });
                 }
             }
         }
@@ -683,14 +536,8 @@ public class MeasurementActivity extends MainActivity implements
                 return;
             }
             Resources resources = activity.getResources();
-            ImageButton buttonPause= (ImageButton) activity.findViewById(R.id.pauseBtn);
-            buttonPause.setEnabled(true);
-            ImageButton buttonRecord= (ImageButton) activity.findViewById(R.id.recordBtn);
 
             if (!activity.measurementService.isStoring()) {
-                // Start recording
-                buttonRecord.setImageResource(R.drawable.button_record_pressed);
-                buttonRecord.setEnabled(false);
                 activity.measurementService.startStorage();
                 // Force service to stay alive even if this activity is killed (Foreground service)
                 activity.startService(new Intent(activity, MeasurementService.class));
@@ -744,9 +591,6 @@ public class MeasurementActivity extends MainActivity implements
             try {
                 if(activity.measurementService.isRecording()) {
                     int seconds = activity.measurementService.getLeqAdded();
-                    if(seconds >= MeasurementActivity.DEFAULT_MINIMAL_LEQ && !activity.buttonRecord.isEnabled()) {
-                        activity.buttonRecord.setEnabled(true);
-                    }
                     Chronometer chronometer = (Chronometer) activity
                             .findViewById(R.id.chronometer_recording_time);
                     if (activity.chronometerWaitingToStart.getAndSet(false)) {
@@ -763,38 +607,10 @@ public class MeasurementActivity extends MainActivity implements
                         }
                     }
 
-                    //Update accuracy hint
-                    final TextView accuracyText = (TextView) activity.findViewById(R.id.textView_value_gps_precision);
-                    final ImageView accuracyImageHint = (ImageView) activity.findViewById(R.id.imageView_value_gps_precision);
-                    Location location = activity.measurementService.getLastLocation();
-                    if(location != null) {
-                        float lastPrecision = location.getAccuracy();
-                        if (lastPrecision < APPROXIMATE_LOCATION_ACCURACY) {
-                            accuracyImageHint.setImageResource(R.drawable.gps_fixed);
-                            accuracyText.setText(activity.getString(R.string.gps_hint_precision,
-                                    (int)lastPrecision));
-                        } else {
-                            accuracyImageHint.setImageResource(R.drawable.gps_not_fixed);
-                            accuracyText.setText(activity.getString(R.string.gps_hint_precision,
-                                    (int)lastPrecision));
-                        }
-                        if (accuracyImageHint.getVisibility() == View.INVISIBLE) {
-                            accuracyImageHint.setVisibility(View.VISIBLE);
-                        }
-                        long now = System.currentTimeMillis();
-                        if(now - activity.lastMapLocationRefresh >= REFRESH_MAP_LOCATION_RATE) {
-                            activity.getMapControler().updateLocationMarker(new MapFragment.LatLng(location.getLatitude(), location.getLongitude()), location.getAccuracy());
-                            activity.lastMapLocationRefresh = now;
-                        }
-                    } else {
-                        accuracyImageHint.setImageResource(R.drawable.gps_off);
-                        accuracyText.setText(R.string.no_gps_hint);
-                    }
                     // Change the text and the textcolor in the corresponding textview
                     // for the Leqi value
                     LeqStats leqStats =
                             activity.measurementService.getFastLeqStats();
-                    // Update current location of user
                     double lastLaeqFast = activity.measurementService.getLAeq();
                     activity.setData(lastLaeqFast);
                     final TextView mTextView = activity.findViewById(R.id.textView_value_SL_i);

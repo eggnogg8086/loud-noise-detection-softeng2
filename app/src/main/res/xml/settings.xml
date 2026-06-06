@@ -1,24 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-    <PreferenceCategory android:title="@string/settings_category_profile">
-
-        <ListPreference
-            android:key="settings_user_noise_knowledge"
-            android:title="@string/title_settings_user_noise_knowledge"
-            android:defaultValue="NONE"
-            android:summary="@string/settings_user_noise_knowledge_description"
-            android:entryValues="@array/knowledge_values"
-            android:entries="@array/knowledge"
-            />
-
-        <!--
-        <Preference
-            android:key="settings_user_language"
-            android:title="@string/title_settings_language"
-            android:summary="@string/settings_language_summary"
-        />
-        -->
-    </PreferenceCategory>
 
  <PreferenceCategory android:title="@string/setting_general_group">
      <CheckBoxPreference
@@ -31,28 +12,6 @@
          android:title="@string/title_settings_caution"
          android:summary="@string/summary_settings_caution"
          android:defaultValue="true" />
-     <CheckBoxPreference
-         android:key="settings_notification_links"
-         android:title="@string/title_settings_notification_links"
-         android:summary="@string/summary_settings_notification_links"
-         android:defaultValue="true" />
-    <CheckBoxPreference
-        android:key="settings_data_transfer"
-        android:title="@string/title_settings_data_transfer"
-        android:summary="@string/summary_settings_data_transfer"
-        android:defaultValue="true" />
-    <CheckBoxPreference
-        android:key="settings_data_transfer_wifi_only"
-        android:title="@string/title_settings_transfer_wifi_only"
-        android:summary="@string/summary_settings_transfer_wifi_only"
-        android:dependency="settings_data_transfer"
-        android:defaultValue="false" />
-     <EditTextPreference
-         android:key="settings_onomap_url"
-         android:title="@string/title_settings_onomap_url"
-         android:summary="@string/title_settings_onomap_url_summary"
-         android:defaultValue="https://onomap-gs.noise-planet.org"
-         />
 
  </PreferenceCategory>
     <PreferenceCategory android:title="@string/setting_measurement_group">
@@ -123,15 +82,6 @@
             android:visibility="gone"
             android:inputType="number"/>
 
-    </PreferenceCategory>
-
-    <PreferenceCategory android:title="@string/title_activity_map">
-        <EditTextPreference
-            android:defaultValue="500"
-            android:key="settings_map_maxmarker"
-            android:title="@string/title_settings_map_maxmarker"
-            android:summary="@string/summary_settings_map_maxmarker"
-            android:inputType="number"/>
     </PreferenceCategory>
 
 </PreferenceScreen>

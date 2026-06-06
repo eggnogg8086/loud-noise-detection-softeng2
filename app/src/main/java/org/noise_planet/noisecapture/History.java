@@ -95,7 +95,6 @@ public class History extends MainActivity {
         infohistory.setAdapter(historyListAdapter);
         infohistory.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE_MODAL);
         infohistory.setLongClickable(true);
-        infohistory.setOnItemClickListener(new HistoryItemListener(this));
     }
 
     private static class HistoryMultiChoiceListener implements AbsListView.MultiChoiceModeListener {
@@ -137,25 +136,6 @@ public class History extends MainActivity {
                     // Close CAB
                     mode.finish();
                     return true;
-                case R.id.publish:
-                    boolean deleted = false;
-                    if(!selectedRecordIds.isEmpty()) {
-                        for(Integer recordId : new ArrayList<Integer>(selectedRecordIds)) {
-                            Storage.Record record = history.measurementManager.getRecord(recordId);
-                            if (!record.getUploadId().isEmpty()) {
-                                selectedRecordIds.remove(recordId);
-                                deleted = true;
-                            }
-                        }
-                        if(deleted) {
-                            Toast.makeText(history, history.getString(R.string.history_already_uploaded), Toast.LENGTH_LONG).show();
-                        }
-                        // publish selected items following the ids
-                        history.doTransferRecords(selectedRecordIds);
-                    }
-                    // Close CAB
-                    mode.finish();
-                    return true;
                 default:
                     return false;
             }
@@ -179,184 +159,6 @@ public class History extends MainActivity {
         }
     }
 
-    @Override
-    protected void onTransferRecord() {
-        historyListAdapter.reload();
-    }
-
-    private static final class HistoryItemListener implements OnItemClickListener {
-        private History historyActivity;
-
-        public HistoryItemListener(History historyActivity) {
-            this.historyActivity = historyActivity;
-        }
-
-        @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            // Show
-            AlertDialog.Builder builder = new AlertDialog.Builder(historyActivity);
-            builder.setTitle(String.format(historyActivity.getText(R.string.history_item_choice_title).toString(),
-                    historyActivity.historyListAdapter.getInformationHistory(position).getUtcDate()));
-            String[] menuEntries = historyActivity.getResources().getStringArray(R
-                    .array.choice_user_history);
-            builder.setItems(menuEntries, new ItemActionOnClickListener(historyActivity, (int)
-                    id));
-            builder.show();
-        }
-    }
-
-    public static void doBuildZip(File file, Context context,int recordId) throws IOException {
-        // Create parent dirs if necessary
-        file.getParentFile().mkdirs();
-        FileOutputStream fop = new FileOutputStream(file);
-        try {
-            MeasurementExport measurementExport = new MeasurementExport(context);
-            measurementExport.exportRecord(recordId, fop, true);
-        } finally {
-            fop.close();
-        }
-    }
-
-    public static class ItemActionOnClickListener implements DialogInterface.OnClickListener {
-        private History historyActivity;
-        private int recordId;
-
-        public ItemActionOnClickListener(History historyActivity, int recordId) {
-            this.historyActivity = historyActivity;
-            this.recordId = recordId;
-        }
-
-        private void launchComment() {
-            Intent ir = new Intent(historyActivity.getApplicationContext(), CommentActivity.class);
-            ir.putExtra(CommentActivity.COMMENT_RECORD_ID, recordId);
-            historyActivity.finish();
-            historyActivity.startActivity(ir);
-        }
-
-        private void launchUpload() {
-            Storage.Record record = historyActivity.measurementManager.getRecord(recordId);
-            if(record.getUploadId().isEmpty()) {
-                historyActivity.progress = ProgressDialog.show(historyActivity, historyActivity.getText(R.string.upload_progress_title), historyActivity.getText(R.string.upload_progress_message), true);
-                new Thread(new SendZipToServer(historyActivity, recordId, historyActivity.progress, new RefreshListener(historyActivity.historyListAdapter))).start();
-            } else {
-                Toast.makeText(historyActivity,
-                        historyActivity.getString(R.string.history_already_uploaded), Toast.LENGTH_LONG).show();
-
-            }
-        }
-
-        private File getSharedFile() {
-            return new File(historyActivity.getCacheDir().getAbsolutePath() ,MeasurementExport.ZIP_FILENAME);
-        }
-
-        private void buildZipFile() {
-            // Write file
-            try {
-                doBuildZip(getSharedFile(), historyActivity, recordId);
-            } catch (IOException ex) {
-                Toast.makeText(historyActivity,
-                        historyActivity.getString(R.string.fail_share), Toast.LENGTH_LONG).show();
-                LOGGER.error(ex.getLocalizedMessage(), ex);
-            }
-        }
-
-
-        private void launchExport() {
-
-            File requestFile = getSharedFile();
-            Uri fileUri = FileProvider.getUriForFile(
-                    historyActivity,
-                    "org.noise_planet.noisecapture.fileprovider",
-                    requestFile);
-
-
-            Intent mResultIntent = new Intent(Intent.ACTION_SEND);
-
-            mResultIntent.setDataAndType(fileUri, "application/zip");
-            mResultIntent.putExtra(Intent.EXTRA_STREAM, fileUri);
-            mResultIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            buildZipFile();
-            historyActivity.startActivity(Intent.createChooser(mResultIntent,
-                    historyActivity.getText(R.string.result_share)));
-        }
-
-        private void launchResult() {
-            Intent ir = new Intent(historyActivity.getApplicationContext(), Results.class);
-            ir.putExtra(RESULTS_RECORD_ID, recordId);
-            historyActivity.finish();
-            historyActivity.startActivity(ir);
-        }
-
-        private void launchMap() {
-            Intent ir = new Intent(historyActivity.getApplicationContext(), MapActivity.class);
-            ir.putExtra(RESULTS_RECORD_ID, recordId);
-            historyActivity.finish();
-            historyActivity.startActivity(ir);
-        }
-
-        private void delete() {
-            AlertDialog.Builder builder = new AlertDialog.Builder(historyActivity);
-            // Add the buttons
-            builder.setPositiveButton(R.string.comment_delete_record, new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int id) {
-                    // Delete record
-                    historyActivity.measurementManager.deleteRecord(recordId);
-                    historyActivity.historyListAdapter.reload();
-                }
-            });
-            builder.setNegativeButton(R.string.comment_cancel_change, new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int id) {
-                }
-            });
-            // Create the AlertDialog
-            AlertDialog dialog = builder.create();
-            dialog.setTitle(R.string.comment_title_delete);
-            dialog.show();
-        }
-
-        @Override
-        public void onClick(DialogInterface dialog, int which) {
-            switch (which) {
-                case 0:
-                    // Upload
-                    launchUpload();
-                    break;
-                case 1:
-                    launchExport();
-                    break;
-                case 2:
-                    // Comment
-                    launchComment();
-                    break;
-                case 3:
-                    // Result
-                    launchResult();
-                    break;
-                case 4:
-                    // Map
-                    launchMap();
-                    break;
-                case 5:
-                    delete();
-                    break;
-            }
-        }
-    }
-
-
-    private static final class RefreshListener implements OnUploadedListener {
-
-        private InformationHistoryAdapter historyListAdapter;
-
-        public RefreshListener(InformationHistoryAdapter historyListAdapter) {
-            this.historyListAdapter = historyListAdapter;
-        }
-
-        @Override
-        public void onMeasurementUploaded() {
-            historyListAdapter.reload();
-        }
-    }
     public static class InformationHistoryAdapter extends BaseAdapter {
         private List<Storage.Record> informationHistoryList;
         private History activity;
@@ -458,13 +260,6 @@ public class History extends MainActivity {
             int nc = getNEcatColors(record.getLeqMean());
             history_SEL.setTextColor(activity.NE_COLORS[nc]);
             history_SEL_bar.setBackgroundColor(activity.NE_COLORS[nc]);
-
-            ImageView imageView = (ImageView) convertView.findViewById(R.id.history_uploaded);
-            if (record.getUploadId().isEmpty()) {
-                imageView.setImageResource(R.drawable.localonly);
-            } else {
-                imageView.setImageResource(R.drawable.uploaded);
-            }
 
             return convertView;
         }

@@ -27,7 +27,6 @@
 
 package org.noise_planet.noisecapture;
 
-import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -35,17 +34,11 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.Color;
-import android.location.GpsStatus;
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
-import android.media.AudioRecordingConfiguration;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -75,17 +68,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MeasurementService extends Service {
 
-    private enum LISTENER {GPS, NETWORK, PASSIVE}
-    private LocationManager gpsLocationManager;
-    private LocationManager passiveLocationManager;
-    private LocationManager networkLocationManager;
-    private CommonLocationListener gpsLocationListener;
-    private CommonLocationListener networkLocationListener;
-    private CommonLocationListener passiveLocationListener;
     // New measurement record sent to the database Event object is Storage.Leq
     public static final String PROP_NEW_MEASUREMENT = "PROP_NEW_MEASUREMENT";
-    private long minTimeDelay = 1000;
-    private static final long MAXIMUM_LOCATION_HISTORY = 50;
     private AudioProcess audioProcess;
     private AtomicBoolean isRecording = new AtomicBoolean(false);  // Is microphone activated
     private AtomicBoolean isPaused = new AtomicBoolean(false);  // Recording is temporary paused
@@ -107,7 +91,6 @@ public class MeasurementService extends Service {
     private PropertyChangeSupport listeners = new PropertyChangeSupport(this);
     private static final Logger LOGGER = LoggerFactory.getLogger(MeasurementService.class);
 
-    private NavigableMap<Long, Location> timeLocation = new TreeMap<Long, Location>();
     private LeqStats leqStats = new LeqStats();
     private LeqStats leqStatsFast = new LeqStats();
 
@@ -167,7 +150,6 @@ public class MeasurementService extends Service {
     public void cancel() {
         canceled.set(true);
         isRecording.set(false);
-        stopLocalisationServices();
     }
 
     public boolean isCanceled() {
@@ -241,13 +223,6 @@ public class MeasurementService extends Service {
         }
     }
 
-    /***
-     * @return Get last precision in meters. Null if no available location
-     */
-    public Location getLastLocation() {
-        return timeLocation.isEmpty() ? null : timeLocation.lastEntry().getValue();
-    }
-
     @Override
     public IBinder onBind(Intent intent) {
         return mBinder;
@@ -255,7 +230,6 @@ public class MeasurementService extends Service {
 
     public void startRecording() {
         canceled.set(false);
-        initLocalisationServices();
         isRecording.set(true);
         this.audioProcess = new AudioProcess(isRecording, canceled);
         if(Double.compare(0, dBGain) != 0) {
@@ -350,98 +324,6 @@ public class MeasurementService extends Service {
         return notificationInstance;
     }
 
-    private void initLocalisationServices() {
-        initPassive();
-        initGPS();
-        initNetworkLocation();
-    }
-
-    private void stopLocalisationServices() {
-        stopPassive();
-        stopGPS();
-        stopNetworkLocation();
-    }
-
-    private void restartLocalisationServices() {
-        LOGGER.info("Restart localisation services");
-        stopLocalisationServices();
-        initLocalisationServices();
-    }
-
-    private void initPassive() {
-        if (passiveLocationListener == null) {
-            passiveLocationListener = new CommonLocationListener(this, LISTENER.PASSIVE);
-        }
-        passiveLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-                && passiveLocationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER)) {
-            passiveLocationManager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER,
-                    minTimeDelay, 0, passiveLocationListener);
-        }
-    }
-
-    private void initNetworkLocation() {
-        if (networkLocationListener == null) {
-            networkLocationListener = new CommonLocationListener(this, LISTENER.NETWORK);
-        }
-        networkLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-                && networkLocationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-            networkLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                    minTimeDelay, 0, networkLocationListener);
-        }
-    }
-
-    private void stopGPS() {
-        if (gpsLocationListener == null || gpsLocationManager == null) {
-            return;
-        }
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-                && passiveLocationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER)) {
-            gpsLocationManager.removeUpdates(gpsLocationListener);
-        }
-    }
-
-
-    private void stopPassive() {
-        if (passiveLocationListener == null || passiveLocationManager == null) {
-            return;
-        }
-        passiveLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-                && passiveLocationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER)) {
-            passiveLocationManager.removeUpdates(passiveLocationListener);
-        }
-    }
-
-    private void stopNetworkLocation() {
-        if (networkLocationListener == null || networkLocationManager == null) {
-            return;
-        }
-        networkLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-                && networkLocationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-            networkLocationManager.removeUpdates(networkLocationListener);
-        }
-    }
-
-    private void initGPS() {
-        if (gpsLocationListener == null) {
-            gpsLocationListener = new CommonLocationListener(this, LISTENER.GPS);
-        }
-        gpsLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-                && passiveLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            gpsLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, minTimeDelay, 0,
-                    gpsLocationListener);
-        }
-    }
 
     public void addPropertyChangeListener(PropertyChangeListener propertyChangeListener) {
         listeners.addPropertyChangeListener(propertyChangeListener);
@@ -489,113 +371,6 @@ public class MeasurementService extends Service {
         this.deletedLeqOnPause = Math.max(0, deletedLeqOnPause);
     }
 
-    /**
-     * @return Deleted leq triggered by a pause
-     */
-    public int getDeletedLeqOnPause() {
-        return deletedLeqOnPause;
-    }
-
-    public void addLocation(Location location) {
-        // Check if the previous location is inside the precision range of the new location
-        // Keep the new location only if the new location is 60% chance away from previous location
-        // and if the new location precision is at least with better accuracy and at most worst
-        // than two times of old location
-        // see https://developer.android.com/guide/topics/location/strategies.html
-        Location previousLocation = timeLocation.isEmpty() ? null : timeLocation.lastEntry().getValue();
-        if(previousLocation == null || (location.getProvider().equals(LocationManager.GPS_PROVIDER) ||
-                previousLocation.getProvider().equals(LocationManager.NETWORK_PROVIDER)||
-                previousLocation.getProvider().equals(LocationManager.PASSIVE_PROVIDER))) {
-            timeLocation.put(System.currentTimeMillis(), location);
-            if (timeLocation.size() > MAXIMUM_LOCATION_HISTORY) {
-                // Clean old entry
-                timeLocation.remove(timeLocation.firstKey());
-            }
-        }
-    }
-
-    /**
-     * Fetch the nearest location acquired during the provided utc time.
-     * @param utcTime UTC time
-     * @return Location or null if not found.
-     */
-    public Location fetchLocation(Long utcTime) {
-        Map.Entry<Long, Location> low = timeLocation.floorEntry(utcTime);
-        Map.Entry<Long, Location> high = timeLocation.ceilingEntry(utcTime);
-        Location res = null;
-        long key = 0;
-        if (low != null && high != null) {
-            // Got two results, find nearest
-            res = Math.abs(utcTime-low.getKey()) < Math.abs(utcTime-high.getKey())
-                    ?   low.getValue()
-                    : high.getValue();
-            key = Math.abs(utcTime-low.getKey()) < Math.abs(utcTime-high.getKey())
-                    ?   low.getKey()
-                    : high.getKey();
-        } else if (low != null || high != null) {
-            // Just one range bound, search the good one
-            res = low != null ? low.getValue() : high.getValue();
-            key = low != null ? low.getKey() : high.getKey();
-        }
-        return res;
-    }
-
-
-    private static class CommonLocationListener implements LocationListener, GpsStatus.Listener, GpsStatus.NmeaListener {
-        private MeasurementService measurementService;
-        private LISTENER listenerId;
-
-        public CommonLocationListener(MeasurementService measurementService, LISTENER listenerId) {
-            this.measurementService = measurementService;
-            this.listenerId = listenerId;
-        }
-
-        @Override
-        public void onGpsStatusChanged(int event) {
-
-        }
-
-        @Override
-        public void onLocationChanged(Location location) {
-            measurementService.addLocation(location);
-        }
-
-        @Override
-        public void onStatusChanged(String provider, int status, Bundle extras) {
-
-        }
-
-        @Override
-        public void onProviderEnabled(String provider) {
-            measurementService.restartLocalisationServices();
-        }
-
-        @Override
-        public void onProviderDisabled(String provider) {
-            measurementService.restartLocalisationServices();
-        }
-
-
-        private int nmeaChecksum(String s) {
-            int c = 0;
-            for(char ch : s.toCharArray()) {
-                c ^= ch;
-            }
-            return c;
-        }
-
-        @Override
-        public void onNmeaReceived(long timestamp, String nmea) {
-
-            if(nmea == null || !nmea.startsWith("$")){
-                return;
-            }
-            StringTokenizer stringTokenizer = new StringTokenizer(nmea, ",");
-            //TODO read NMEA
-            // Used by bluetooth GPS receivers
-
-        }
-    }
 
     private static class DoProcessing implements  PropertyChangeListener {
         private MeasurementService measurementService;
@@ -613,22 +388,10 @@ public class MeasurementService extends Service {
                     // Delayed audio processing
                     AudioProcess.AudioMeasureResult measure =
                             (AudioProcess.AudioMeasureResult) event.getNewValue();
-                    Location location = measurementService.fetchLocation(measure.getBeginRecordTime());
-                    Storage.Leq leq;
-                    if (location == null) {
-                        leq = new Storage.Leq(measurementService.recordId, -1, measure
-                                .getBeginRecordTime(), 0, 0, null,
-                                null, null, 0.f, 0,
+                    Storage.Leq leq = new Storage.Leq(measurementService.recordId, -1, measure
+                                .getBeginRecordTime(),
                                 (float)measure.getGlobaldBaValue());
-                    } else {
-                        leq = new Storage.Leq(measurementService.recordId, -1, measure
-                                .getBeginRecordTime(), location.getLatitude(), location.getLongitude(),
-                                location.hasAltitude() ? location.getAltitude() : null,
-                                location.hasSpeed() ? location.getSpeed() : null,
-                                location.hasBearing() ? location.getBearing() : null,
-                                location.getAccuracy(), location.getTime(),
-                                (float)measure.getGlobaldBaValue());
-                    }
+
                     double[] freqValues = measurementService.audioProcess.getDelayedCenterFrequency();
                     final double[] leqs = measure.getLeqs();
                     // Add leqs to stats
@@ -676,7 +439,6 @@ public class MeasurementService extends Service {
                         }
                     }
                     measurementService.isRecording.set(false);
-                    measurementService.stopLocalisationServices();
                     // Stop task
                     measurementService.stopForeground(true);
                     measurementService.stopSelf();
@@ -705,12 +467,8 @@ public class MeasurementService extends Service {
         // Set is foreground in order to let this service running without stopping
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        type = type | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
-                    }
-                    startForeground(NOTIFICATION_ID, notification, type);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
                 } else {
                     startForeground(NOTIFICATION_ID, notification);
                 }

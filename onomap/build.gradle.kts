@@ -1,10 +1,10 @@
 import org.gradle.api.tasks.testing.logging.TestLogEvent.*
 
 plugins {
-  kotlin("jvm") version "2.1.21" // Kotlin version to use
+  kotlin("jvm") // Kotlin version to use
   groovy
   application
-  id("biz.aQute.bnd.builder") version "6.1.0" // To generate MANIFEST file
+  id("biz.aQute.bnd.builder") version "7.2.3" // To generate MANIFEST file
 }
 
 group = "org.noise-planet"
@@ -36,31 +36,31 @@ application {
 }
 
 dependencies {
-  implementation(platform("io.vertx:vertx-stack-depchain:$vertxVersion"))
-  implementation("com.zaxxer:HikariCP:[6.3.0,7)")
-  implementation("org.apache.groovy:groovy-all:[4.0.26,5)")
-  implementation("org.postgresql:postgresql:42.7.2")
-  implementation("io.vertx:vertx-web")
-  implementation("org.orbisgis:h2gis:[2.2.3,3)")
-  implementation("org.orbisgis:postgis-jts:[2.2.3,3)")
-  implementation("io.vertx:vertx-launcher-application")
-  implementation("org.osgi:org.osgi.service.jdbc:[1.0.0,2)")
-  implementation("io.vertx:vertx-config")
-  implementation("io.vertx:vertx-lang-kotlin")
-  implementation("io.vertx:vertx-lang-kotlin-coroutines")
-  implementation("org.apache.commons:commons-text:[1.13.1,2)")
+  implementation(platform(libs.vertx.stack.depchain))
+  implementation(libs.hikaricp)
+  implementation(libs.groovy.all)
+  implementation(libs.postgresql)
+  implementation(libs.vertx.web)
+  implementation(libs.h2gis)
+  implementation(libs.postgis.jts)
+  implementation(libs.vertx.launcher.application)
+  implementation(libs.org.osgi.service.jdbc)
+  implementation(libs.vertx.config)
+  implementation(libs.vertx.lang.kotlin)
+  implementation(libs.vertx.lang.kotlin.coroutines)
+  implementation(libs.commons.text)
   implementation(kotlin("stdlib-jdk8"))
-  implementation("org.osgi:org.osgi.framework:1.10.0")
-  implementation("com.ongres.scram:client:2.1")
-  implementation("org.geotools.xsd:gt-xsd-wps:[22.2,23)")
-  implementation("org.geotools.xsd:gt-xsd-core:[22.2,23)")
-  implementation(group = "org.slf4j", name = "slf4j-log4j12", version = "[2, 3)")
-  implementation("org.apache.logging.log4j:log4j-core:[2.24.3, 3)")
-  testImplementation("org.slf4j:slf4j-simple:[2.0.17,3)")
-  testImplementation("io.vertx:vertx-junit5")
-  testImplementation("io.vertx:vertx-web-client")
-  testImplementation("org.junit.jupiter:junit-jupiter:$junitJupiterVersion")
-  testImplementation("org.hamcrest:hamcrest-library:1.3")
+  implementation(libs.org.osgi.framework)
+  implementation(libs.client)
+  implementation(libs.gt.xsd.wps)
+  implementation(libs.gt.xsd.core)
+  implementation(libs.slf4j.log4j12)
+  annotationProcessor(libs.log4j.core)
+  testImplementation(libs.slf4j.simple)
+  testImplementation(libs.vertx.junit5)
+  testImplementation(libs.vertx.web.client)
+  testImplementation(libs.junit.jupiter)
+  testImplementation(libs.hamcrest.library)
 }
 
 tasks.compileGroovy {

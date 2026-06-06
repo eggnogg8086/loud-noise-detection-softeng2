@@ -18,13 +18,7 @@
     <string name="calibration_cancel_change">Zrušit</string>
     <string name="fail_share">Generování sdíleného souboru se nezdařilo</string>
     <string name="no_results">Není žádný výsledek. Nejdříve spusťte záznam.</string>
-    <string name="no_gps_results">Žádné souřadnice GPS v tomto záznamu</string>
-    <string name="no_gps_hint">Není GPS</string>
-    <string name="gps_hint_precision">%1$d m</string>
-    <string name="loc_hint">Nápověda ke stavu polohy</string>
     <string name="permission_explain_audio_record">Aplikace NoiseCapture vyžaduje pro měření zvuku povolení k použití mikrofonu.</string>
-    <string name="permission_explain_gps">NoiseCapture vyžaduje polohu GPS pro lokalizaci hladiny hluku na mapě.</string>
-    <string name="permission_explain_access_wifi_state">NoiseCapture vyžaduje povolení přístupu ke stavu wifi, aby nepřenášel data, pokud nejste připojeni pomocí wifi.</string>
 
     <string name="title_menu">Nabídka</string>
     <string name="title_service_measurement">Měření</string>
@@ -57,10 +51,6 @@
     <string name="setting_general_group">Obecné</string>
     <string name="setting_measurement_group">Měření</string>
     <string name="setting_calibration_group">Kalibrace</string>
-    <string name="title_settings_data_transfer">Přenos dat</string>
-    <string name="summary_settings_data_transfer">Automatický přenos měření</string>
-    <string name="title_settings_transfer_wifi_only">Pouze Wifi</string>
-    <string name="summary_settings_transfer_wifi_only">Automatický přenos pouze přes wifi</string>
     <string name="title_settings_recording">Nahrávání</string>
     <string name="summary_settings_recording">Nastavení maximální doby záznamu</string>
     <string name="title_settings_caution">Varovná zpráva</string>
@@ -86,7 +76,6 @@
     <string name="measurement_dba_la90">LA90</string>
     <string name="measurement_tab_spectrum">Spektrum</string>
     <string name="measurement_tab_spectrogram">Spektrogram</string>
-    <string name="measurement_tab_map">Mapa</string>
 
     <!--  Ressources for the spinner calibration !-->
 
@@ -106,18 +95,12 @@
     <!--  Ressources for the Drawer and option menu !-->
     <string-array name="dm_list_array">
         <item>Měření</item>
-        <item>Popis</item>
         <item>Výsledky</item>
-        <item>Historie</item>
-        <item>Mapa</item>
         <item>Kalibrace</item>
         <item>Nápověda</item>
         <item>O aplikaci</item>
     </string-array>
     <string name="result_share">Sdílet tento výsledek</string>
-    <string name="result_button_map">Zobrazit mapu</string>
-    <string name="result_button_upload">Nahrát</string>
-    <string name="result_tooltip_minsl">Minimální hladina hluku vážená koeficientem A za 1 sekundu</string>
     <string name="result_tooltip_maxsl">Maximální hladina hluku vážená koeficientem A za 1 sekundu</string>
     <string name="result_tooltip_la10">LA10: Hladina hluku vážená koeficientem A, která je překročena po dobu 10% doby měření. LA10 je užitečný deskriptor hluku ze silniční dopravy, který koreluje s obtěžováním hlukem.</string>
     <string name="result_tooltip_la50">LA50: Hladina hluku vážená koeficientem A, která je překročena po 50% doby měření. LA50 je medián hladiny hluku</string>
@@ -179,20 +162,15 @@
     <string name="start_text_subtitle">Měření akustického prostředí</string>
     <string name="start_text_developed_by">Vyvinutý od</string>
     <string name="start_text_supported_by">Podporován od</string>
-    <string name="upload_progress_title">Nahrávání&#8230;</string>
-    <string name="upload_progress_message">Nahrávání měření</string>
 
     <string name="history_length">%d s</string>
     <string name="history_date">- %s</string>
-    <string name="history_already_uploaded">Toto měření je již nahráno</string>
     <string name="history_sel">%.01f dB(A)</string>
-    <string name="history_upload_top">Nahrát</string>
-    <string name="history_uploadeddescr">Byl tento výsledek nahrán do databáze komunity?</string>
 
     <string name="measurement_processlastsamples">Zpracování zbývajících %d vzorků&#8230;</string>
     <string name="history_item_choice_title">Měření %s</string>
     <string name="calibration_select_frequency">Zvolte frekvenci zobrazení</string>
-    <string name="local_service_started">Spuštění lokalizační služby</string>
+    <string name="local_service_started">Measurement service started</string>
     <string name="measurement_service_disconnected">Služba měření odpojena</string>
     <string name="measurement_pause">Měření pozastaveno</string>
     <string name="delete">Smazat</string>
@@ -259,9 +237,6 @@ track.geojson 1s vzorky měření. Použití formátu geojson (http://geojson.io
     <string name="share_message">Měřím %.01f dB(A) pomocí #NoiseCapture</string>
     <string name="summary_settings_measurement_display_window">Funkce okna pro měření v reálném čase (nepoužívá se pro konečný výsledek)</string>
     <string name="title_settings_measurement_display_window">Okno reálného času</string>
-    <string name="title_settings_map_maxmarker">Zobrazené limity měření</string>
-    <string name="summary_settings_map_maxmarker">Maximální počet měření zobrazených na mapě (0 pro všechna měření)</string>
-    <string name="map_title_progress_loading">Načítání míst měření</string>
     <string name="policy_legal_age">Mám zákonný věk pro používání této aplikace</string>
     <string name="policy_agree_statement">Souhlasím se zásadami ochrany osobních údajů NoiseCapture</string>
     <string name="policy_button_continue">Pokračovat</string>
@@ -269,8 +244,6 @@ track.geojson 1s vzorky měření. Použití formátu geojson (http://geojson.io
     <string name="privacy_policy_title">Zásady ochrany soukromí</string>
     <string name="notification_record_content">Probíhá měření.</string>
     <string name="result_title_progress_loading">Načítání měření</string>
-    <string name="userinfo_tags_measurement_conditions">Podmínky měření</string>
-    <string name="notification_goto_community_map_title">Měření komunity</string>
 
     <string-array name="output_mode_labels">
         <item>Hlasové volání</item>
@@ -286,12 +259,6 @@ track.geojson 1s vzorky měření. Použití formátu geojson (http://geojson.io
         <item>Hann</item>
     </string-array>
     <string name="notification_goto_community_map">Navštivte http://noise-planet.org, prohlédněte si mapu všech měření provedených komunitou.</string>
-    <string name="title_settings_notification_links">Oznámení</string>
-    <string name="summary_settings_notification_links">Zaškrtněte zobrazení odkazu na oznámení na webové stránky Noise-Planet</string>
-    <string name="settings_category_profile">Profil uživatele</string>
-    <string name="title_settings_user_noise_knowledge">Profil uživatele</string>
-    <string name="settings_user_noise_knowledge_description">Jak hodnotíte své znalosti o zvukovém prostředí ?</string>
-    <string name="hint_userinput_noiseparty_tag">NoiseCapture Party kód</string>
     <string-array name="knowledge">
         <item>Nemám žádné znalosti v oblasti hluku</item>
         <item>Mám určité znalosti v oblasti hluku</item>
@@ -327,11 +294,6 @@ track.geojson 1s vzorky měření. Použití formátu geojson (http://geojson.io
     <string name="calibration_estimated_gain">Zisk %.2f dB(A)</string>
     <string name="calibration_awaiting_vehicle_passby">Čekání na projíždějící vozidlo</string>
     <string name="calibration_done_vehicle_passby">Konec kalibrace stiskněte níže uvedené tlačítko</string>
-    <string name="localisation_policy_title" >Oznámení o lokalizaci</string>
-    <string name="localisation_policy_webpage">file:///android_asset/html/localisation_notice.html</string>
-    <string name="policy_button_understood">Potvrzení</string>
-    <string name="title_settings_onomap_url">Community server url</string>
-    <string name="title_settings_onomap_url_summary">NoiseCapture nahraje měření na tento komunitní server.</string>
     <string name="result_laeq">LAeq</string>
     <string name="result_linechart_description">Časový vývoj hladin hluku v dB(A)</string>
     <string name="result_tab_linechart">Čas</string>

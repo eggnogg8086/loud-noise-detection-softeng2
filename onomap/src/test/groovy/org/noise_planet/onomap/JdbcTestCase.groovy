@@ -63,7 +63,7 @@ class JdbcTestCase {
   Connection connection
   boolean isH2GISDatabase = false
 
-  static Logger LOG = LoggerFactory.getLogger(this.class.name)
+  static Logger LOG = LoggerFactory.getLogger(JdbcTestCase.class)
 
   static DataSource createDataSource(String user, String password, boolean debug) throws SQLException {
     HikariConfig config = new HikariConfig()

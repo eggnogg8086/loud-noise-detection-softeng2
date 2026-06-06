@@ -289,20 +289,6 @@
                 android:layout_weight="1"
                 android:text="@string/userinfo_button_measure" />
 
-            <Button
-                android:id="@+id/uploadBtn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/result_button_upload" />
-
-            <Button
-                android:id="@+id/mapBtn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/result_button_map" />
-
         </LinearLayout>
 
         <LinearLayout

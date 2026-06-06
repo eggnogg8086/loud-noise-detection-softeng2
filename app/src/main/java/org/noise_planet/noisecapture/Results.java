@@ -27,13 +27,11 @@
 
 package org.noise_planet.noisecapture;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import androidx.core.view.MenuItemCompat;
@@ -48,29 +46,14 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.github.mikephil.charting.charts.BarChart;
-import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.charts.PieChart;
 import com.github.mikephil.charting.components.Legend;
 import com.github.mikephil.charting.components.Legend.LegendPosition;
-import com.github.mikephil.charting.components.XAxis;
-import com.github.mikephil.charting.components.XAxis.XAxisPosition;
-import com.github.mikephil.charting.components.YAxis;
-import com.github.mikephil.charting.data.BarData;
-import com.github.mikephil.charting.data.BarDataSet;
-import com.github.mikephil.charting.data.BarEntry;
 import com.github.mikephil.charting.data.Entry;
-import com.github.mikephil.charting.data.LineData;
-import com.github.mikephil.charting.data.LineDataSet;
 import com.github.mikephil.charting.data.PieData;
 import com.github.mikephil.charting.data.PieDataSet;
 import com.github.mikephil.charting.formatter.PercentFormatter;
-import com.github.mikephil.charting.formatter.ValueFormatter;
-import com.github.mikephil.charting.formatter.YAxisValueFormatter;
 import com.github.mikephil.charting.highlight.Highlight;
-import com.github.mikephil.charting.interfaces.datasets.IBarDataSet;
-import com.github.mikephil.charting.interfaces.datasets.ILineDataSet;
-import com.github.mikephil.charting.utils.ViewPortHandler;
 import com.google.android.material.tabs.TabLayout;
 import com.nhaarman.supertooltips.ToolTip;
 import com.nhaarman.supertooltips.ToolTipRelativeLayout;
@@ -81,14 +64,11 @@ import org.orbisgis.sos.LeqStats;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Results extends MainActivity {
@@ -208,33 +188,8 @@ public class Results extends MainActivity {
             findViewById(R.id.textView_label_la90_SL).setOnTouchListener(touchListener);
         }
 
-        // Action on Map button
-        Button buttonMap=(Button)findViewById(R.id.mapBtn);
-        buttonMap.setEnabled(true);
-        buttonMap.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                // Go to map page
-                Intent a = new Intent(getApplicationContext(), MapActivity.class);
-                a.putExtra(RESULTS_RECORD_ID, record.getId());
-                startActivity(a);
-                finish();
-            }
-        });
         View measureButton = findViewById(R.id.measureBtn);
         measureButton.setOnClickListener(new OnGoToMeasurePage(this));
-        // Action on export button
-
-        Button exportComment=(Button)findViewById(R.id.uploadBtn);
-        exportComment.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                runOnUiThread(new SendResults(Results.this, record.getId()));
-            }
-        });
-
-        exportComment.setEnabled(record.getUploadId().isEmpty());
-
 
         AsyncTask.execute(new LoadMeasurements(this));
     }
@@ -262,23 +217,6 @@ public class Results extends MainActivity {
             activity.startActivity(ir);
         }
     }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        // Transfer results automatically (with all checking)
-        checkTransferResults();
-    }
-
-    protected void onTransferRecord() {
-        // Nothing to do
-        // Change upload state
-        Button exportComment=(Button)findViewById(R.id.uploadBtn);
-        // Refresh record
-        record = measurementManager.getRecord(record.getId());
-        exportComment.setEnabled(record.getUploadId().isEmpty());
-    }
-
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -317,18 +255,8 @@ public class Results extends MainActivity {
             }
             hashtags.append(record.getNoisePartyTag());
         }
-        //@see https://dev.twitter.com/web/tweet-button/web-intent
-        // Compute position of this measurement
-        double[] coordinates = measurementManager.getRecordCenterPosition(record.getId(), 15);
-        String append = "";
-        if(coordinates != null) {
-            append += "&url=" + Uri.encode("http://noise-planet.org/map_noisecapture/index" +
-                    ".html#18/"+String.format(Locale.ROOT, "%.5f",
-                    coordinates[0]) +"/" + String.format(Locale.ROOT, "%.5f",coordinates[1])) + "/";
-        }
         String url = "https://www.twitter.com/intent/tweet?via=Noise_Planet&hashtags="+hashtags.toString() +
-                "&text=" + Uri.encode(getString(R.string.share_message, record.getLeqMean())) +
-                append;
+                "&text=" + Uri.encode(getString(R.string.share_message, record.getLeqMean()));
         Intent i = new Intent(Intent.ACTION_VIEW);
         i.setData(Uri.parse(url));
         if (mShareActionProvider == null) {
@@ -480,88 +408,6 @@ public class Results extends MainActivity {
 
 
 
-    private static final class ReadRecordsProgression implements MeasurementManager
-            .ProgressionCallBack, View.OnClickListener {
-        private AppCompatActivity activity;
-        private long beginReadRecords = 0;
-        AtomicBoolean canceled = new AtomicBoolean(false);
-        int recordCount = 0;
-        int record = 0;
-        int lastProgress = 0;
-        boolean handleProgression = false;
-        private static final int MINIMAL_RECORD_DISPLAY_PROGRESS = 100;
-        View progressView;
-        ProgressBar progressBar;
-        Button button;
-
-        public ReadRecordsProgression(AppCompatActivity activity) {
-            this.activity = activity;
-            progressView = activity.findViewById(R.id
-                    .result_progress_layout);
-            progressBar = (ProgressBar) activity.findViewById(R.id
-                    .result_progress_control);
-            button = (Button)activity.findViewById(R.id
-                    .result_progress_cancel);
-            button.setOnClickListener(this);
-        }
-
-        @Override
-        public void onClick(View v) {
-            canceled.set(true);
-        }
-
-        @Override
-        public void onCreateCursor(int recordCount) {
-            this.recordCount = recordCount;
-            beginReadRecords = System.currentTimeMillis();
-            if(recordCount > MINIMAL_RECORD_DISPLAY_PROGRESS) {
-                activity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        progressBar.setProgress(0);
-                        progressView.setVisibility(View.VISIBLE);
-                    }
-                });
-                handleProgression = true;
-            }
-        }
-
-        @Override
-        public boolean onCursorNext() {
-            if(handleProgression) {
-                record++;
-                final int newProgression = (int)((record / (double) recordCount) * 100);
-                if(newProgression / 5 != lastProgress / 5) {
-                    activity.runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                                progressBar.setProgress(newProgression, true);
-                            } else {
-                                progressBar.setProgress(newProgression);
-                            }
-                        }
-                    });
-                    lastProgress = newProgression;
-                }
-            }
-            return !canceled.get();
-        }
-
-        @Override
-        public void onDeleteCursor() {
-            activity.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    progressView.setVisibility(View.GONE);
-                }
-            });
-            if(BuildConfig.DEBUG) {
-                System.out.println("Fetch measurement time "+(System.currentTimeMillis() - beginReadRecords)+" " +
-                        "ms");
-            }
-        }
-    }
     private static class LoadMeasurements implements Runnable {
         private Results activity;
 

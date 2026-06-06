@@ -68,19 +68,19 @@ public class ApplicationTest {
     public ActivityTestRule<MeasurementActivity> mActivityRule = new ActivityTestRule<>(
             MeasurementActivity.class);
 
-    @Test
-    public void launchRecord() {
-        Intent intent = new Intent();
-        mActivityRule.launchActivity(intent);
-
-        assertEquals(-1, mActivityRule.getActivity().getRecordId());
-
-
-        // Click on launch record
-        onView(withId(R.id.recordBtn)).perform(click());
-
-        // Check that record id is defined
-        assertNotEquals(-1, mActivityRule.getActivity().getRecordId());
-    }
+//    @Test
+//    public void launchRecord() {
+//        Intent intent = new Intent();
+//        mActivityRule.launchActivity(intent);
+//
+//        assertEquals(-1, mActivityRule.getActivity().getRecordId());
+//
+//
+//        // Click on launch record
+//        onView(withId(R.id.recordBtn)).perform(click());
+//
+//        // Check that record id is defined
+//        assertNotEquals(-1, mActivityRule.getActivity().getRecordId());
+//    }
 
 }

@@ -52,13 +52,6 @@
                     android:gravity="center"
                     android:orientation="vertical">
 
-                    <TextView
-                        android:id="@+id/calibration_communication_label"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/calibration_communication"
-                        android:textSize="15sp" />
-
                     <LinearLayout
                         android:id="@+id/pitch_notification"
                         android:layout_width="match_parent"

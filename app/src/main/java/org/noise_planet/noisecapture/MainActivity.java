@@ -87,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
     public int[] NE_COLORS;
     public static final String RESULTS_RECORD_ID = "RESULTS_RECORD_ID";
     protected static final Logger MAINLOGGER = LoggerFactory.getLogger(MainActivity.class);
-    private static final int NOTIFICATION_MAP = R.string.notification_goto_community_map_title;
+    private static final int NOTIFICATION_MAP = 101;
 
     // For the list view
     public ListView mDrawerList;
@@ -96,7 +96,7 @@ public class MainActivity extends AppCompatActivity {
     public ActionBarDrawerToggle mDrawerToggle;
     private ProgressDialog progress;
 
-    public static final int PERMISSION_RECORD_AUDIO_AND_GPS = 1;
+    public static final int PERMISSION_RECORD_AUDIO = 1;
     public static final int PERMISSION_WIFI_STATE = 2;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -121,63 +121,23 @@ public class MainActivity extends AppCompatActivity {
         }
         try {
             doRequestPermission.set(true);
-            if (ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.RECORD_AUDIO)
-                    != PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.FOREGROUND_SERVICE_MICROPHONE)
-                    != PackageManager.PERMISSION_GRANTED ||ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.ACCESS_FINE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(this,
-                    Manifest.permission.FOREGROUND_SERVICE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED) {
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                        Manifest.permission.FOREGROUND_SERVICE_MICROPHONE)) {
-                    // After the user
-                    // sees the explanation, try again to request the permission.
-                    Toast.makeText(this,
-                            R.string.permission_explain_audio_record, Toast.LENGTH_LONG).show();
+            List<String> permissionsToRequest = new ArrayList<>();
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.RECORD_AUDIO);
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE_MICROPHONE) != PackageManager.PERMISSION_GRANTED) {
+                    permissionsToRequest.add(Manifest.permission.FOREGROUND_SERVICE_MICROPHONE);
                 }
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                        Manifest.permission.RECORD_AUDIO)) {
-                    // After the user
-                    // sees the explanation, try again to request the permission.
-                    Toast.makeText(this,
-                            R.string.permission_explain_audio_record, Toast.LENGTH_LONG).show();
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE) != PackageManager.PERMISSION_GRANTED) {
+                    permissionsToRequest.add(Manifest.permission.FOREGROUND_SERVICE);
                 }
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                        Manifest.permission.ACCESS_FINE_LOCATION)) {
-                    // After the user
-                    // sees the explanation, try again to request the permission.
-                    Toast.makeText(this,
-                            R.string.permission_explain_gps, Toast.LENGTH_LONG).show();
-                }
-                // Request the permission.
-                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    ActivityCompat.requestPermissions(this,
-                            new String[]{Manifest.permission.RECORD_AUDIO,
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.FOREGROUND_SERVICE,
-                                    Manifest.permission.FOREGROUND_SERVICE_MICROPHONE,
-                                    Manifest.permission.FOREGROUND_SERVICE_LOCATION},
-                            PERMISSION_RECORD_AUDIO_AND_GPS);
-                } if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    ActivityCompat.requestPermissions(this,
-                            new String[]{Manifest.permission.RECORD_AUDIO,
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.FOREGROUND_SERVICE},
-                            PERMISSION_RECORD_AUDIO_AND_GPS);
-                } else if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    ActivityCompat.requestPermissions(this,
-                            new String[]{Manifest.permission.RECORD_AUDIO,
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.FOREGROUND_SERVICE},
-                            PERMISSION_RECORD_AUDIO_AND_GPS);
-                } else {
-                    ActivityCompat.requestPermissions(this,
-                            new String[]{Manifest.permission.RECORD_AUDIO,
-                                    Manifest.permission.ACCESS_FINE_LOCATION},
-                            PERMISSION_RECORD_AUDIO_AND_GPS);
-                }
+            }
+
+            if (!permissionsToRequest.isEmpty()) {
+                ActivityCompat.requestPermissions(this, permissionsToRequest.toArray(new String[0]), PERMISSION_RECORD_AUDIO);
                 return false;
             }
             return true;
@@ -216,30 +176,6 @@ public class MainActivity extends AppCompatActivity {
                 DateFormat.getDateInstance().format(buildDate), gitHash);
     }
 
-    /**
-     * If necessary request user to acquire permissions for critical resources (gps and microphone)
-     * @return True if service can be bind immediately. Otherwise, the bind should be done using the
-     * @see #onRequestPermissionsResult
-     */
-    protected boolean checkAndAskWifiStatePermission() {
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_WIFI_STATE)
-                != PackageManager.PERMISSION_GRANTED) {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    android.Manifest.permission.ACCESS_WIFI_STATE)) {
-                // After the user
-                // sees the explanation, try again to request the permission.
-                Toast.makeText(this,
-                        R.string.permission_explain_access_wifi_state, Toast.LENGTH_LONG).show();
-            }
-            // Request the permission.
-            ActivityCompat.requestPermissions(this,
-                    new String[]{android.Manifest.permission.ACCESS_WIFI_STATE},
-                    PERMISSION_WIFI_STATE);
-            return false;
-        }
-        return true;
-    }
 
     void initDrawer(Integer recordId) {
         try {
@@ -335,17 +271,7 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case 1:
                     // Comment
-                    Intent ir = new Intent(getApplicationContext(), CommentActivity.class);
-                    if(recordId != null && recordId >= 0) {
-                        ir.putExtra(CommentActivity.COMMENT_RECORD_ID, recordId);
-                    }
-                    mDrawerLayout.closeDrawer(mDrawerList);
-                    startActivity(ir);
-                    finish();
-                    break;
-                case 2:
-                    // Results
-                    ir = new Intent(getApplicationContext(), Results.class);
+                    Intent ir = new Intent(getApplicationContext(), Results.class);
                     if(recordId != null && recordId >= 0) {
                         ir.putExtra(RESULTS_RECORD_ID, recordId);
                     }
@@ -353,30 +279,14 @@ public class MainActivity extends AppCompatActivity {
                     startActivity(ir);
                     finish();
                     break;
-                case 3:
-                    // History
-                    Intent a = new Intent(getApplicationContext(), History.class);
-                    startActivity(a);
-                    finish();
-                    mDrawerLayout.closeDrawer(mDrawerList);
-                    break;
-                case 4:
-                    // Show the map
-                    Intent imap = new Intent(getApplicationContext(), MapActivity.class);
-                    if(recordId != null && recordId >= 0) {
-                        imap.putExtra(Results.RESULTS_RECORD_ID, recordId);
-                    }
-                    startActivity(imap);
-                    finish();
-                    mDrawerLayout.closeDrawer(mDrawerList);
-                    break;
-                case 5:
+
+                case 2:
                     Intent ics = new Intent(getApplicationContext(), CalibrationMenu.class);
                     mDrawerLayout.closeDrawer(mDrawerList);
                     startActivity(ics);
                     finish();
                     break;
-                case 6:
+                case 3:
                     Intent ih = new Intent(getApplicationContext(),ViewHtmlPage.class);
                     mDrawerLayout.closeDrawer(mDrawerList);
                     ih.putExtra("pagetosee",
@@ -386,7 +296,7 @@ public class MainActivity extends AppCompatActivity {
                     startActivity(ih);
                     finish();
                     break;
-                case 7:
+                case 4:
                     Intent ia = new Intent(getApplicationContext(),ViewHtmlPage.class);
                     ia.putExtra("pagetosee",
                             getString(R.string.url_about));
@@ -466,136 +376,6 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    protected boolean isManualTransferOnly() {
-        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-        return !sharedPref.getBoolean("settings_data_transfer", true);
-    }
-
-    protected boolean isWifiTransferOnly() {
-        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-        return sharedPref.getBoolean("settings_data_transfer_wifi_only", false);
-    }
-
-    /**
-     * Check the non-uploaded results and the connection states
-     * Upload results if necessary
-     */
-    protected void checkTransferResults() {
-        if (!isManualTransferOnly()) {
-            MeasurementManager measurementManager = new MeasurementManager(this);
-            if (!measurementManager.hasNotUploadedRecords()) {
-                return;
-            }
-            if (isWifiTransferOnly()) {
-                if (checkAndAskWifiStatePermission()) {
-                    if (!checkWifiState()) {
-                        return;
-                    }
-                } else {
-                    // Transfer will begin when user validate check Wi-Fi rights
-                    return;
-                }
-            }
-            new Thread(new DoSendZipToServer(this)).start();
-        }
-    }
-
-
-    /**
-     * Ping largest internet dns access to check if internet is available
-     * @return True if Internet is available
-     */
-    public boolean isOnline() {
-        try {
-            SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
-            String serverUrl = sharedPref.getString("settings_onomap_url",
-                    MeasurementUploadWPS.BASE_URL);
-            serverUrl += "/geoserver/ows?service=wps&version=1.0.0&request=GetCapabilities";
-            URL url = new URL(serverUrl);
-            HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
-            int code = urlConnection.getResponseCode();
-            return code == 200 || code == 301 || code == 302;
-        } catch (IOException e) {
-            MAINLOGGER.error(e.getLocalizedMessage(), e);
-        }
-        return false;
-    }
-
-    /**
-     * Transfer provided records
-     */
-    protected void doTransferRecords(List<Integer> selectedRecordIds) {
-        runOnUiThread(new SendResults(this, selectedRecordIds));
-    }
-
-    /**
-     * Transfer records without checking user preferences
-     */
-    protected void doTransferRecords() {
-        if(!isOnline()) {
-            MAINLOGGER.info("Not online, skip send of record");
-            return;
-        }
-        MeasurementManager measurementManager = new MeasurementManager(this);
-        List<Storage.Record> records = measurementManager.getRecords();
-        final List<Integer> recordsToTransfer = new ArrayList<>();
-        for(Storage.Record record : records) {
-            // Auto send records only if the record is not in progress and if the user have
-            // validated the Description activity
-            if(record.getUploadId().isEmpty() && record.getTimeLength() > 0 && record
-                    .getNoisePartyTag() != null) {
-                recordsToTransfer.add(record.getId());
-            }
-        }
-        if(!recordsToTransfer.isEmpty()) {
-            doTransferRecords(recordsToTransfer);
-        }
-    }
-
-    protected static final class SendResults implements Runnable {
-        private MainActivity mainActivity;
-        private List<Integer> recordsToTransfer;
-
-        public SendResults(MainActivity mainActivity, List<Integer> recordsToTransfer) {
-            this.mainActivity = mainActivity;
-            this.recordsToTransfer = recordsToTransfer;
-        }
-
-        public SendResults(MainActivity mainActivity, Integer... recordsToTransfer) {
-            this.mainActivity = mainActivity;
-            this.recordsToTransfer = Arrays.asList(recordsToTransfer);
-        }
-
-        @Override
-        public void run() {
-            // Export
-            try {
-                mainActivity.progress = ProgressDialog.show(mainActivity, mainActivity
-                        .getText(R.string
-                        .upload_progress_title),
-                        mainActivity.getText(R.string.upload_progress_message), true);
-            } catch (RuntimeException ex) {
-                // This error may arise on some system
-                // The display of progression are not vital so cancel the crash by handling the
-                // error
-                MAINLOGGER.error(ex.getLocalizedMessage(), ex);
-            }
-            new Thread(new SendZipToServer(mainActivity, recordsToTransfer, mainActivity
-                    .progress, new
-                    OnUploadedListener() {
-                @Override
-                public void onMeasurementUploaded() {
-                    mainActivity.onTransferRecord();
-                }
-            })).start();
-        }
-    }
-
-    protected void onTransferRecord() {
-        // Nothing to do
-    }
-
-
     /***
      * Checks that application runs first time and write flags at SharedPreferences
      * Need further codes for enhancing conditions
@@ -604,153 +384,7 @@ public class MainActivity extends AppCompatActivity {
      * see also for checking version (later) : http://stackoverflow.com/questions/7562786/android-first-run-popup-dialog
      * Can be used for checking new version
      */
-    protected boolean CheckNbRun(String preferenceName, int maxCount) {
-        SharedPreferences preferences = getPreferences(MODE_PRIVATE);
-        SharedPreferences.Editor editor = preferences.edit();
-        Integer NbRun = preferences.getInt(preferenceName, 1);
-        if (NbRun > maxCount) {
-            NbRun=1;
-        }
-        editor.putInt(preferenceName, NbRun+1);
-        editor.apply();
-        return (NbRun==1);
-    }
 
-    protected void displayCommunityMapNotification() {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this)
-                .setSmallIcon(MeasurementService.getNotificationIcon())
-                .setContentTitle(getString(R.string.notification_goto_community_map_title))
-                .setContentText(getString(R.string.notification_goto_community_map))
-                .setAutoCancel(true);
-        NotificationCompat.BigTextStyle bigTextStyle =
-                new NotificationCompat.BigTextStyle();
-        bigTextStyle.setBigContentTitle(getString(R.string.notification_goto_community_map_title));
-        bigTextStyle.bigText(getString(R.string.notification_goto_community_map));
-        builder.setStyle(bigTextStyle);
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setData(Uri.parse("http://noise-planet.org/map_noisecapture"));
-        TaskStackBuilder stackBuilder = TaskStackBuilder.create(this);
-        stackBuilder.addParentStack(this);
-        stackBuilder.addNextIntent(intent);
-        if (Build.VERSION.SDK_INT >= 34) {
-            builder.setContentIntent(stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT + PendingIntent.FLAG_MUTABLE + PendingIntent.FLAG_NO_CREATE + PendingIntent.FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT));
-        } else if (Build.VERSION.SDK_INT >= 31) {
-            builder.setContentIntent(stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT + PendingIntent.FLAG_MUTABLE));
-        } else {
-            builder.setContentIntent(stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT));
-        }
-        NotificationManager mNM = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
-        mNM.notify(NOTIFICATION_MAP, builder.build());
-    }
-
-
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        switch (requestCode) {
-            case PERMISSION_WIFI_STATE: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    checkTransferResults();
-                }
-            }
-        }
-    }
-
-    private boolean checkWifiState() {
-
-        // Check connection state
-        WifiManager wifiMgr = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-        if (wifiMgr.isWifiEnabled()) { // Wi-Fi adapter is ON
-            WifiInfo wifiInfo = wifiMgr.getConnectionInfo();
-            if (wifiInfo.getNetworkId() == -1) {
-                return false; // Not connected to an access-Point
-            }
-            // Connected to an Access Point
-            return true;
-        } else {
-            return false; // Wi-Fi adapter is OFF
-        }
-    }
-
-    public static final class DoSendZipToServer implements Runnable {
-        MainActivity mainActivity;
-
-        public DoSendZipToServer(MainActivity mainActivity) {
-            this.mainActivity = mainActivity;
-        }
-
-        @Override
-        public void run() {
-            mainActivity.doTransferRecords();
-        }
-    }
-
-    public static final class SendZipToServer implements Runnable {
-        private Activity activity;
-        private List<Integer> recordsId = new ArrayList<>();
-        private ProgressDialog progress;
-        private final OnUploadedListener listener;
-
-        public SendZipToServer(Activity activity, int recordId, ProgressDialog progress, OnUploadedListener listener) {
-            this.activity = activity;
-            this.recordsId.add(recordId);
-            this.progress = progress;
-            this.listener = listener;
-        }
-
-        public SendZipToServer(Activity activity, Collection<Integer> records, ProgressDialog progress, OnUploadedListener listener) {
-            this.activity = activity;
-            this.recordsId.addAll(records);
-            this.progress = progress;
-            this.listener = listener;
-        }
-
-        @Override
-        public void run() {
-            MeasurementUploadWPS measurementUploadWPS = new MeasurementUploadWPS(activity);
-            MeasurementManager measurementManager = new MeasurementManager(activity);
-            try {
-                for(Integer recordId : recordsId) {
-                    Storage.Record record = measurementManager.getRecord(recordId);
-                    if(record.getUploadId().isEmpty()) {
-                        measurementUploadWPS.uploadRecord(recordId);
-                    }
-                }
-                if(listener != null) {
-                    activity.runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            listener.onMeasurementUploaded();
-                        }
-                    });
-                }
-            } catch (final IOException ex) {
-                MAINLOGGER.error(ex.getLocalizedMessage(), ex);
-                activity.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(activity,
-                                ex.getLocalizedMessage(), Toast.LENGTH_LONG).show();
-                    }
-                });
-            } finally {
-                if(progress != null && progress.isShowing()) {
-                    try {
-                        progress.dismiss();
-                    } catch (IllegalArgumentException ex) {
-                        //Ignore
-                    }
-                }
-            }
-        }
-    }
-
-    public interface OnUploadedListener {
-        void onMeasurementUploaded();
-    }
     // Choose color category in function of sound level
     public static int getNEcatColors(double SL) {
 

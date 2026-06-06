@@ -1,0 +1,79 @@
+[versions]
+annotation = "1.8.1"
+appcompat = "1.7.1"
+client = "2.1"
+commonsMath3 = "3.6.1"
+commonsText = "1.15.0"
+constraintlayout = "2.2.1"
+core = "2.21.3"
+espressoCore = "3.7.0"
+gradle = "9.2.1"
+groovyAll = "5.0.6"
+hamcrestLibrary = "3.0"
+hikaricp = "7.0.2"
+jorbis = "0.0.17.4"
+jtransforms = "3.2"
+junit = "1.3.0"
+junitJupiter = "6.1.0"
+junitVersion = "4.13.2"
+library = "3.0.0"
+log4jCore = "2.26.0"
+material = "1.14.0"
+mpandroidchart = "v2.2.5"
+orbisgis = "2.2.5"
+orgOsgiFramework = "1.10.0"
+orgOsgiServiceJdbc = "1.1.0"
+postgresql = "42.7.11"
+robolectric = "4.16.1"
+rules = "1.7.0"
+slf4j = "2.0.18"
+vectordrawable = "1.2.0"
+vertx = "5.0.12"
+xsd = "[22.2,23)"
+
+[libraries]
+annotation = { group = "androidx.annotation", name = "annotation", version.ref = "annotation" }
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+client = { group = "com.ongres.scram", name = "client", version.ref = "client" }
+commons-math3 = { group = "org.apache.commons", name = "commons-math3", version.ref = "commonsMath3" }
+commons-text = { group = "org.apache.commons", name = "commons-text", version.ref = "commonsText" }
+constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junit" }
+gradle = { group = "com.android.tools.build", name = "gradle", version.ref = "gradle" }
+groovy-all = { group = "org.apache.groovy", name = "groovy-all", version.ref = "groovyAll" }
+gt-xsd-core = { group = "org.geotools.xsd", name = "gt-xsd-core", version.ref = "xsd" }
+gt-xsd-wps = { group = "org.geotools.xsd", name = "gt-xsd-wps", version.ref = "xsd" }
+h2gis = { group = "org.orbisgis", name = "h2gis", version.ref = "orbisgis" }
+hamcrest-library = { group = "org.hamcrest", name = "hamcrest-library", version.ref = "hamcrestLibrary" }
+hikaricp = { group = "com.zaxxer", name = "HikariCP", version.ref = "hikaricp" }
+jackson-core = { group = "com.fasterxml.jackson.core", name = "jackson-core", version.ref = "core" }
+jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version.ref = "core" }
+jorbis = { group = "com.googlecode.soundlibs", name = "jorbis", version.ref = "jorbis" }
+jtransforms = { group = "com.github.wendykierp", name = "JTransforms", version.ref = "jtransforms" }
+junit = { group = "junit", name = "junit", version.ref = "junitVersion" }
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junitJupiter" }
+library = { group = "com.nhaarman.supertooltips", name = "library", version.ref = "library" }
+log4j-core = { group = "org.apache.logging.log4j", name = "log4j-core", version.ref = "log4jCore" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+mpandroidchart = { group = "com.github.PhilJay", name = "MPAndroidChart", version.ref = "mpandroidchart" }
+org-osgi-framework = { group = "org.osgi", name = "org.osgi.framework", version.ref = "orgOsgiFramework" }
+org-osgi-service-jdbc = { group = "org.osgi", name = "org.osgi.service.jdbc", version.ref = "orgOsgiServiceJdbc" }
+postgis-jts = { group = "org.orbisgis", name = "postgis-jts", version.ref = "orbisgis" }
+postgresql = { group = "org.postgresql", name = "postgresql", version.ref = "postgresql" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+rules = { group = "androidx.test", name = "rules", version.ref = "rules" }
+slf4j-api = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
+slf4j-log4j12 = { group = "org.slf4j", name = "slf4j-log4j12", version.ref = "slf4j" }
+slf4j-simple = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
+vectordrawable = { group = "androidx.vectordrawable", name = "vectordrawable", version.ref = "vectordrawable" }
+vertx-stack-depchain = { group = "io.vertx", name = "vertx-stack-depchain", version.ref = "vertx" }
+vertx-config = { group = "io.vertx", name = "vertx-config", version.ref = "vertx" }
+vertx-web = { group = "io.vertx", name = "vertx-web", version.ref = "vertx" }
+vertx-launcher-application = { group = "io.vertx", name = "vertx-launcher-application", version.ref = "vertx" }
+vertx-lang-kotlin = { group = "io.vertx", name = "vertx-lang-kotlin", version.ref = "vertx" }
+vertx-lang-kotlin-coroutines = { group = "io.vertx", name = "vertx-lang-kotlin-coroutines", version.ref = "vertx" }
+vertx-web-client = { group = "io.vertx", name = "vertx-web-client", version.ref = "vertx" }
+vertx-junit5 = { group = "io.vertx", name = "vertx-junit5", version.ref = "vertx" }
+
+[plugins]

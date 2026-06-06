@@ -36,16 +36,6 @@
             android:lines="3"
             android:scrollbars="vertical"
             android:textSize="14sp"/>
-            <EditText
-                android:id="@+id/edit_noiseparty_tag"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="start|top"
-                android:hint="@string/hint_userinput_noiseparty_tag"
-                android:inputType="textCapWords"
-                android:lines="1"
-                android:scrollbars="none"
-                android:textSize="14sp"/>
         </LinearLayout>
 
         <LinearLayout
@@ -124,27 +114,6 @@
                 android:gravity="center_horizontal"
                 android:orientation="vertical">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_horizontal"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:paddingTop="5dp"
-                        android:paddingLeft="5dp"
-                        android:paddingRight="5dp"
-                        android:text="@string/userinfo_tags_measurement_conditions"
-                        android:textSize="15sp"/>
-
-                    <LinearLayout
-                        android:id="@+id/tags_measurement_conditions"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"/>
-                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
