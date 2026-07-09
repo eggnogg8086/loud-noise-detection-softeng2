@@ -1,2 +1,0 @@
-- Amélioration de la stabilité de l'application et mise à jour des liens et des textes
-

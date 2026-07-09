@@ -1,2 +1,0 @@
-NoiseCapture, la cartographie collaborative du bruit dans l'environnement .
-

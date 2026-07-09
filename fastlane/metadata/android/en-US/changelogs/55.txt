@@ -1,3 +1,0 @@
-Added information about collecting the user's location at first start-up.
-Android 11 compatibility
-

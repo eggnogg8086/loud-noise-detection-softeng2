@@ -1,2 +1,0 @@
-- Enhance the application stability and Update of links & texts
-

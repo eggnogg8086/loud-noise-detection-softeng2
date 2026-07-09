@@ -1,2 +1,0 @@
-NoiseCapture is an App dedicated to the measurement of environmental noise.
-
