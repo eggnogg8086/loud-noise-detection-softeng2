@@ -182,7 +182,7 @@ class AudioMonitorService : Service() {
         val manager =
             getSystemService(NotificationManager::class.java)
 
-        manager.notify(ALERT_ID, notification)
+        manager.notify(ALERT_ID+1, notification)
     }
 
     private fun buildForegroundNotification(): Notification {
