@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -19,7 +20,9 @@ import kotlin.math.sqrt
 class AudioMonitorService : Service() {
 
     companion object {
-        private const val CHANNEL_ID = "audio_monitor"
+        private const val FOREGROUND_CHANNEL_ID = "audio_monitor_service"
+        private const val ALERT_CHANNEL_ID = "audio_monitor_alerts"
+
         private const val FOREGROUND_ID = 1
         private const val ALERT_ID = 2
 
@@ -57,16 +60,29 @@ class AudioMonitorService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Audio Monitoring",
+            val manager = getSystemService(NotificationManager::class.java)
+
+            val serviceChannel = NotificationChannel(
+                FOREGROUND_CHANNEL_ID,
+                "Audio Monitoring Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Foreground service for monitoring audio"
+                description = "Foreground service notification"
             }
 
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            val alertChannel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "Noise Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts for loud noise and daily exposure"
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                enableVibration(true)
+                enableLights(true)
+            }
+
+            manager.createNotificationChannel(serviceChannel)
+            manager.createNotificationChannel(alertChannel)
         }
     }
 
@@ -144,8 +160,6 @@ class AudioMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startMonitoring() {
-        Log.d("AudioMonitorService", "startMonitoring()")
-        println("@!!!!!!!!!!!!!!!!!!!HOIUEHFUIOSHIUWHGIUHRIUGHSBLKDFHKLJSDBFLKJSDHBKLJDSF")
         val deviceId = settingsManager?.selectedMicId ?: -1
         val preset = settingsManager?.audioPreset ?: 9
 
@@ -155,34 +169,40 @@ class AudioMonitorService : Service() {
 
     private fun sendLoudNoiseNotification(db: Double, duration: Float) {
 
-        val notification =
-            NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_alert)
-                .setContentTitle("Loud Noise Detected")
-                .setContentText("${db.toInt()} dB detected for ${String.format("%.1f", duration)}s")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build()
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("Loud Noise Detected")
+            .setContentText("${db.toInt()} dB detected for ${String.format("%.1f", duration)}s")
+            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+            .setVibrate(longArrayOf(0, 300))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .build()
 
-        val manager =
-            getSystemService(NotificationManager::class.java)
-
-        manager.notify(ALERT_ID, notification)
+        getSystemService(NotificationManager::class.java)
+            .notify(ALERT_ID, notification)
     }
 
     private fun sendExposureNotification(dose: Float) {
+
         val percentage = (dose * 100).toInt()
-        val notification =
-            NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("Noise Exposure Alert")
-                .setContentText("You have reached $percentage% of your daily NIOSH noise dose limit.")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build()
 
-        val manager =
-            getSystemService(NotificationManager::class.java)
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Noise Exposure Alert")
+            .setContentText("You have reached $percentage% of your daily NIOSH noise dose limit.")
+            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+            .setVibrate(longArrayOf(0, 300))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .build()
 
-        manager.notify(ALERT_ID+1, notification)
+        getSystemService(NotificationManager::class.java)
+            .notify(ALERT_ID + 1, notification)
     }
 
     private fun buildForegroundNotification(): Notification {
@@ -198,7 +218,7 @@ class AudioMonitorService : Service() {
             this, 0, mainActivityIntent, PendingIntent.FLAG_IMMUTABLE
         )
 
-        return  NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
             .setContentTitle("Noise Monitoring")
             .setContentText("Listening for loud sounds")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
