@@ -27,9 +27,11 @@ class AudioMonitorService : Service() {
     }
 
     private var settingsManager: SettingsManager? = null
+    private var exposureManager: ExposureManager? = null
     private var lastNotificationTime = 0L
     private var noiseStartTime = 0L
     private val NOTIFICATION_COOLDOWN = 5000L // 5 seconds between alerts
+    private var lastCallbackTime = 0L
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_SERVICE) {
@@ -53,10 +55,29 @@ class AudioMonitorService : Service() {
         super.onTaskRemoved(rootIntent)
     }
 
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Audio Monitoring",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Foreground service for monitoring audio"
+            }
+
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
+        createNotificationChannel()
+
         settingsManager = SettingsManager(this)
+        exposureManager = ExposureManager(this)
         logMicrophoneSpecs()
+
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
@@ -80,6 +101,17 @@ class AudioMonitorService : Service() {
     }
 
     private val serviceCallback = AudioBridge.SpectrumCallback { _, db ->
+        val now = System.currentTimeMillis()
+        if (lastCallbackTime != 0L) {
+            val deltaTimeSeconds = (now - lastCallbackTime) / 1000f
+            exposureManager?.addExposure(db, deltaTimeSeconds)
+            if (exposureManager?.shouldNotify() == true) {
+                sendExposureNotification(exposureManager?.getCurrentDose() ?: 0f)
+                exposureManager?.markNotified()
+            }
+        }
+        lastCallbackTime = now
+
         val threshold = settingsManager?.thresholdDb ?: 82f
         val requiredDurationMs = ((settingsManager?.durationSeconds ?: 1f) * 1000).toLong()
 
@@ -90,7 +122,6 @@ class AudioMonitorService : Service() {
 
             val elapsed = System.currentTimeMillis() - noiseStartTime
             if (elapsed >= requiredDurationMs) {
-                val now = System.currentTimeMillis()
                 if (now - lastNotificationTime > NOTIFICATION_COOLDOWN) {
                     sendLoudNoiseNotification(db.toDouble(), elapsed / 1000f)
                     lastNotificationTime = now
@@ -102,6 +133,8 @@ class AudioMonitorService : Service() {
     }
 
     override fun onDestroy() {
+        println("SERVICE DESTROYED")
+        exposureManager?.persist()
         AudioBridge.removeCallback(serviceCallback)
         AudioBridge.stop()
         AudioBridge.destroy()
@@ -111,6 +144,8 @@ class AudioMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startMonitoring() {
+        Log.d("AudioMonitorService", "startMonitoring()")
+        println("@!!!!!!!!!!!!!!!!!!!HOIUEHFUIOSHIUWHGIUHRIUGHSBLKDFHKLJSDBFLKJSDHBKLJDSF")
         val deviceId = settingsManager?.selectedMicId ?: -1
         val preset = settingsManager?.audioPreset ?: 9
 
@@ -134,6 +169,22 @@ class AudioMonitorService : Service() {
         manager.notify(ALERT_ID, notification)
     }
 
+    private fun sendExposureNotification(dose: Float) {
+        val percentage = (dose * 100).toInt()
+        val notification =
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("Noise Exposure Alert")
+                .setContentText("You have reached $percentage% of your daily NIOSH noise dose limit.")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .build()
+
+        val manager =
+            getSystemService(NotificationManager::class.java)
+
+        manager.notify(ALERT_ID, notification)
+    }
+
     private fun buildForegroundNotification(): Notification {
         val stopIntent = Intent(this, AudioMonitorService::class.java).apply {
             action = ACTION_STOP_SERVICE
@@ -147,15 +198,14 @@ class AudioMonitorService : Service() {
             this, 0, mainActivityIntent, PendingIntent.FLAG_IMMUTABLE
         )
 
-        return Notification.Builder(this, CHANNEL_ID)
+        return  NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Noise Monitoring")
             .setContentText("Listening for loud sounds")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
-            .setAutoCancel(false)
             .setContentIntent(mainActivityPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent)
-            .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+//            .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 

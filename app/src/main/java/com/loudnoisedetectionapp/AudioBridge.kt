@@ -20,7 +20,9 @@ object AudioBridge {
     private external fun nativeDestroy()
 
     private val internalCallback = SpectrumCallback { spectrum, db ->
-        val currentCallbacks = callbacks.toList()
+        val currentCallbacks = synchronized(callbacks) {
+            callbacks.toList()
+        }
         currentCallbacks.forEach { it.onSpectrum(spectrum, db) }
     }
 

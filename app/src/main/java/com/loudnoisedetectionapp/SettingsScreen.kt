@@ -30,6 +30,8 @@ fun SettingsScreen(
     var selectedPreset by remember { mutableStateOf(settingsManager.audioPreset) }
     var threshold by remember { mutableStateOf(settingsManager.thresholdDb) }
     var duration by remember { mutableStateOf(settingsManager.durationSeconds) }
+    var nioshEnabled by remember { mutableStateOf(settingsManager.nioshEnabled) }
+    var nioshRatio by remember { mutableStateOf(settingsManager.nioshRatio) }
 
     val presets = listOf(
         "Unprocessed" to 9,
@@ -63,6 +65,40 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 ) {
                     Text("Reset Calibration Max")
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
+
+            item {
+                Text("NIOSH Exposure Tracking", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Enable Exposure Notifications")
+                    Switch(
+                        checked = nioshEnabled,
+                        onCheckedChange = {
+                            nioshEnabled = it
+                            settingsManager.nioshEnabled = it
+                        }
+                    )
+                }
+                if (nioshEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Notify at Dose: ${(nioshRatio * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
+                    Slider(
+                        value = nioshRatio,
+                        onValueChange = {
+                            nioshRatio = it
+                            settingsManager.nioshRatio = it
+                        },
+                        valueRange = 0.1f..1.0f,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Text("Notify when you reach this ratio of your daily limit.", style = MaterialTheme.typography.bodySmall)
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }

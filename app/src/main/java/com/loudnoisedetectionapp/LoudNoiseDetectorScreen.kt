@@ -16,13 +16,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoudNoiseDetectorScreen(
     modifier: Modifier = Modifier,
-    audioViewModel: AudioViewModel = AudioViewModel()
+    audioViewModel: AudioViewModel = viewModel()
 ) {
     var hasPermission by remember { mutableStateOf(false) }
     var showBatteryPrompt by remember { mutableStateOf(false) }
@@ -73,6 +74,18 @@ fun LoudNoiseDetectorScreen(
         }
     }
 
+    val currentDb = audioViewModel.currentDb
+
+    val noiseDescription = remember(currentDb) {
+        when {
+            currentDb < 40f -> "Very Quiet"
+            currentDb < 55f -> "Quiet"
+            currentDb < 70f -> "Moderate"
+            currentDb < 85f -> "Loud"
+            currentDb < 100f -> "Very Loud"
+            else -> "Extremely Loud"
+        }
+    }
 
     LaunchedEffect(Unit) {
         val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
@@ -92,7 +105,7 @@ fun LoudNoiseDetectorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Noise Detector") },
+                title = { Text(noiseDescription) },
                 actions = {
                     TextButton(onClick = { showSettings = true }) {
                         Text("Settings")
@@ -138,6 +151,12 @@ fun LoudNoiseDetectorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
+                )
+
+                Text(
+                    text = "Daily Noise Dose: ${(audioViewModel.dailyDose * 100).toInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (audioViewModel.dailyDose >= 1.0f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                 )
 
                 Spectrogram(

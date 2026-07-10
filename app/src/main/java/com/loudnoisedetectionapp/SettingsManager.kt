@@ -13,6 +13,12 @@ class SettingsManager(context: Context) {
         private const val KEY_AUDIO_PRESET = "audio_preset"
         private const val KEY_THRESHOLD_DB = "threshold_db"
         private const val KEY_DURATION_SEC = "duration_sec"
+
+        private const val KEY_NIOSH_ENABLED = "niosh_enabled"
+        private const val KEY_NIOSH_RATIO = "niosh_ratio"
+        private const val KEY_DAILY_DOSE = "daily_dose"
+        private const val KEY_LAST_DOSE_UPDATE = "last_dose_update"
+        private const val KEY_DOSE_NOTIFIED_TODAY = "dose_notified_today"
         
         // Default to -1 (Auto/Default)
         const val MIC_ID_AUTO = -1
@@ -23,6 +29,7 @@ class SettingsManager(context: Context) {
 
         const val DEFAULT_THRESHOLD = 82f
         const val DEFAULT_DURATION = 1f // 1 second
+        const val DEFAULT_NIOSH_RATIO = 0.8f
     }
 
     var thresholdDb: Float
@@ -40,4 +47,24 @@ class SettingsManager(context: Context) {
     var audioPreset: Int
         get() = prefs.getInt(KEY_AUDIO_PRESET, PRESET_UNPROCESSED)
         set(value) = prefs.edit().putInt(KEY_AUDIO_PRESET, value).apply()
+
+    var nioshEnabled: Boolean
+        get() = prefs.getBoolean(KEY_NIOSH_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_NIOSH_ENABLED, value).apply()
+
+    var nioshRatio: Float
+        get() = prefs.getFloat(KEY_NIOSH_RATIO, DEFAULT_NIOSH_RATIO)
+        set(value) = prefs.edit().putFloat(KEY_NIOSH_RATIO, value).apply()
+
+    var dailyDose: Float
+        get() = prefs.getFloat(KEY_DAILY_DOSE, 0f)
+        set(value) = prefs.edit().putFloat(KEY_DAILY_DOSE, value).apply()
+
+    var lastDoseUpdate: Long
+        get() = prefs.getLong(KEY_LAST_DOSE_UPDATE, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_DOSE_UPDATE, value).apply()
+
+    var doseNotifiedToday: Boolean
+        get() = prefs.getBoolean(KEY_DOSE_NOTIFIED_TODAY, false)
+        set(value) = prefs.edit().putBoolean(KEY_DOSE_NOTIFIED_TODAY, value).apply()
 }
