@@ -35,14 +35,16 @@ class ExposureManager(context: Context) {
         val allowedSeconds = 28800.0 / 2.0.pow(exponent)
         
         val deltaDose = durationSeconds.toDouble() / allowedSeconds
-        
+
         cachedDose += deltaDose.toFloat()
+        AudioBridge.currentDose = cachedDose
         
         // Persist occasionally to avoid hammering disk
         val now = System.currentTimeMillis()
         if (now - lastPersistTime > PERSIST_INTERVAL_MS) {
             persist()
         }
+
     }
 
     fun getCurrentDose(): Float {

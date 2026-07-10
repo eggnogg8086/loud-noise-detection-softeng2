@@ -3,6 +3,9 @@ package com.loudnoisedetectionapp
 import java.util.Collections
 
 object AudioBridge {
+    @Volatile
+    var currentDose = 0f
+
     init {
         System.loadLibrary("noisecapture")
     }

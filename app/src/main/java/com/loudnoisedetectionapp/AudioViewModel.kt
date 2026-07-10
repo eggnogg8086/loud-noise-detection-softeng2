@@ -28,13 +28,14 @@ class AudioViewModel : ViewModel() {
         private set
 
     private var calibrationManager: CalibrationManager? = null
-    private var exposureManager: ExposureManager? = null
+    private var settingsManager: SettingsManager? = null
 
     fun initCalibration(context: Context) {
         calibrationManager = CalibrationManager(context)
+        settingsManager = SettingsManager(context)
+
         maxDb = calibrationManager?.maxRecordedDb ?: 100f
-        exposureManager = ExposureManager(context)
-        dailyDose = exposureManager?.getCurrentDose() ?: 0f
+        dailyDose = settingsManager?.dailyDose ?: 0f
     }
 
     val spectroState = SpectrogramState().apply {
@@ -49,7 +50,7 @@ class AudioViewModel : ViewModel() {
                 maxDb = db
                 calibrationManager?.maxRecordedDb = db
             }
-            dailyDose = exposureManager?.getCurrentDose() ?: 0f
+            dailyDose = AudioBridge.currentDose
 
             val doubles = DoubleArray(spectrum.size) { spectrum[it].toDouble() }
             spectroState.addTimeStep(doubles, HERTZ_PER_CELL)
@@ -63,13 +64,10 @@ class AudioViewModel : ViewModel() {
 
     init {
         // We just attach to the already running (or about to run) bridge
-        println("CREATED ${hashCode()}")
         AudioBridge.addCallback(callback)
     }
 
     override fun onCleared() {
-        println("CLEARED ${hashCode()}")
-        exposureManager?.persist()
         super.onCleared()
         AudioBridge.removeCallback(callback)
     }
