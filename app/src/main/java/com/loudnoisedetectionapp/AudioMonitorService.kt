@@ -7,6 +7,10 @@ import android.app.Service
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.RingtoneManager
@@ -17,7 +21,7 @@ import androidx.core.app.NotificationCompat
 import kotlin.math.log10
 import kotlin.math.sqrt
 
-class AudioMonitorService : Service() {
+class AudioMonitorService : Service(), SensorEventListener {
 
     companion object {
         private const val FOREGROUND_CHANNEL_ID = "audio_monitor_service"
@@ -35,6 +39,11 @@ class AudioMonitorService : Service() {
     private var noiseStartTime = 0L
     private val NOTIFICATION_COOLDOWN = 5000L // 5 seconds between alerts
     private var lastCallbackTime = 0L
+
+    private lateinit var sensorManager: SensorManager
+    private var accelerometer: Sensor? = null
+    @Volatile
+    private var currentMovementIntensity = 0f
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_SERVICE) {
@@ -90,11 +99,7 @@ class AudioMonitorService : Service() {
         super.onCreate()
         createNotificationChannel()
 
-        settingsManager = SettingsManager(this)
-        exposureManager = ExposureManager(this)
-        logMicrophoneSpecs()
-
-
+        // Start foreground ASAP to prevent system crashes on startup
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 FOREGROUND_ID,
@@ -108,6 +113,17 @@ class AudioMonitorService : Service() {
             )
         }
 
+        settingsManager = SettingsManager(this)
+        exposureManager = ExposureManager(this)
+
+        // Initialize accelerometer for handling noise compensation
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        accelerometer?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+
+        logMicrophoneSpecs()
         startMonitoring()
     }
 
@@ -118,9 +134,15 @@ class AudioMonitorService : Service() {
 
     private val serviceCallback = AudioBridge.SpectrumCallback { _, db ->
         val now = System.currentTimeMillis()
+
+        // Movement-based noise compensation: subtract from dB if phone is moving/shaking
+        // High movement intensity (handling) creates artificial noise spikes.
+        val movementCompensation = (currentMovementIntensity * 2.2f).coerceAtMost(20.0f)
+        val compensatedDb = db - movementCompensation
+
         if (lastCallbackTime != 0L) {
             val deltaTimeSeconds = (now - lastCallbackTime) / 1000f
-            exposureManager?.addExposure(db, deltaTimeSeconds)
+            exposureManager?.addExposure(compensatedDb, deltaTimeSeconds)
             if (exposureManager?.shouldNotify() == true) {
                 sendExposureNotification(exposureManager?.getCurrentDose() ?: 0f)
                 exposureManager?.markNotified()
@@ -131,7 +153,7 @@ class AudioMonitorService : Service() {
         val threshold = settingsManager?.thresholdDb ?: 82f
         val requiredDurationMs = ((settingsManager?.durationSeconds ?: 1f) * 1000).toLong()
 
-        if (db > threshold) {
+        if (compensatedDb > threshold) {
             if (noiseStartTime == 0L) {
                 noiseStartTime = System.currentTimeMillis()
             }
@@ -139,7 +161,7 @@ class AudioMonitorService : Service() {
             val elapsed = System.currentTimeMillis() - noiseStartTime
             if (elapsed >= requiredDurationMs) {
                 if (now - lastNotificationTime > NOTIFICATION_COOLDOWN) {
-                    sendLoudNoiseNotification(db.toDouble(), elapsed / 1000f)
+                    sendLoudNoiseNotification(compensatedDb.toDouble(), elapsed / 1000f)
                     lastNotificationTime = now
                 }
             }
@@ -150,12 +172,26 @@ class AudioMonitorService : Service() {
 
     override fun onDestroy() {
         println("SERVICE DESTROYED")
+        sensorManager.unregisterListener(this)
         exposureManager?.persist()
         AudioBridge.removeCallback(serviceCallback)
         AudioBridge.stop()
         AudioBridge.destroy()
         super.onDestroy()
     }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+            val x = event.values[0]
+            val y = event.values[1]
+            val z = event.values[2]
+            val magnitude = sqrt(x * x + y * y + z * z)
+            // Subtract gravity constant to get movement-based acceleration
+            currentMovementIntensity = Math.abs(magnitude - 9.81f)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onBind(intent: Intent?): IBinder? = null
 
