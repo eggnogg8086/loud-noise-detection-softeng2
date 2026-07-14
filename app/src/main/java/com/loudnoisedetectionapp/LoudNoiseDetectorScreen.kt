@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -28,6 +29,7 @@ fun LoudNoiseDetectorScreen(
     var hasPermission by remember { mutableStateOf(false) }
     var showBatteryPrompt by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -39,6 +41,14 @@ fun LoudNoiseDetectorScreen(
             onBack = { showSettings = false },
             audioViewModel = audioViewModel
         )
+        return
+    }
+
+    if (showHistory) {
+        BackHandler {
+            showHistory = false
+        }
+        NoiseHistoryScreen(onBack = { showHistory = false })
         return
     }
 
@@ -105,8 +115,11 @@ fun LoudNoiseDetectorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(noiseDescription) },
+                title = { Text("Noise Monitor") },
                 actions = {
+                    TextButton(onClick = { showHistory = true }) {
+                        Text("History")
+                    }
                     TextButton(onClick = { showSettings = true }) {
                         Text("Settings")
                     }
@@ -140,29 +153,57 @@ fun LoudNoiseDetectorScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (hasPermission) {
-                VUMeter(
-                    db = audioViewModel.currentDb,
-                    maxDb = maxOf(100f, audioViewModel.maxDb),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                )
+                // Top section (VU Meter + Dose + Insights)
+                Column(
+                    modifier = Modifier.weight(0.5f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = noiseDescription,
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
 
-                Text(
-                    text = "Daily Noise Dose: ${(audioViewModel.dailyDose * 100).toInt()}%",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (audioViewModel.dailyDose >= 1.0f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                )
+                    VUMeter(
+                        db = audioViewModel.currentDb,
+                        maxDb = maxOf(100f, audioViewModel.maxDb),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp)
+                    )
 
-                Spectrogram(
-                    state = audioViewModel.spectroState,
-                    modifier = Modifier.fillMaxSize()
-                )
+                    Spacer(Modifier.height(24.dp))
+
+                    Text(
+                        text = "Daily Dose: ${(audioViewModel.dailyDose * 100).toInt()}%",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = if (audioViewModel.dailyDose >= 1.0f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = audioViewModel.currentNoiseType,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                // Spectrogram section (Half height)
+                Box(modifier = Modifier.weight(0.5f)) {
+                    Spectrogram(
+                        state = audioViewModel.spectroState,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             } else {
                 Text(
                     "Microphone permission required",

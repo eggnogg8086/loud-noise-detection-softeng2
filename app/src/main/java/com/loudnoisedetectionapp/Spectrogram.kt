@@ -10,6 +10,8 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.*
 
@@ -31,10 +33,18 @@ enum class SpectrogramScaleMode { LOG, LINEAR }
 
 private const val FREQ_LEGEND_TIC_WIDTH_PX = 4
 private const val TIME_LEGEND_TIC_HEIGHT_PX = 4
-private const val FREQ_LEGEND_TEXT_SIZE_SP = 11f
+private const val FREQ_LEGEND_TEXT_SIZE_SP = 13f
 
 private val FREQ_POSITIONS_LOG    = intArrayOf(63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
 private val FREQ_POSITIONS_LINEAR = intArrayOf(0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000, 12500, 16000)
+
+private val BAND_LABELS = mapOf(
+    60 to "Sub-Bass",
+    250 to "Bass/Low-Mid",
+    1000 to "Voice Fundamental",
+    3500 to "Presence/Clarity",
+    8000 to "High/Brilliance"
+)
 
 // ---------------------------------------------------------------------------
 // A column owns its bitmap. When it falls off the buffer it is recycled.
@@ -88,11 +98,24 @@ class Column(val spectrum: DoubleArray) {
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
+data class SpectrogramAnnotation(
+    val timeOffsetSeconds: Double, // Seconds from "now"
+    val label: String,
+    val color: Color = Color.Yellow
+)
+
 class SpectrogramState {
     var scaleMode: SpectrogramScaleMode by mutableStateOf(SpectrogramScaleMode.LOG)
     var timeStep: Double = 0.125
     var pixelsPerTic: Int by mutableIntStateOf(4)
     var hertzPerCell: Double by mutableDoubleStateOf(0.0)
+    var dominantFrequency: Float by mutableFloatStateOf(0f)
+
+    val annotations = mutableStateListOf<SpectrogramAnnotation>()
+
+    fun addAnnotation(label: String, color: Color = Color.Yellow) {
+        annotations.add(SpectrogramAnnotation(0.0, label, color))
+    }
 
     // Compose-observable count — Canvas reads this to know when to redraw
     var frameCount  by mutableIntStateOf(0)
@@ -100,12 +123,26 @@ class SpectrogramState {
 
     var windowSeconds: Double = 10.0
 
-    private val maxBufferTics get() = (windowSeconds / timeStep).toInt().coerceAtLeast(10)    // Internal ring buffer of Column objects — not directly observed by Compose
+    private val maxBufferTics get() = (windowSeconds / timeStep).toInt().coerceAtLeast(10)
+
     private val columns = ArrayDeque<Column>()
 
     fun addTimeStep(spectrum: DoubleArray, hertzBySpectrumCell: Double) {
         hertzPerCell = hertzBySpectrumCell
         columns.addFirst(Column(spectrum))
+        
+        // Update annotation offsets
+        val toRemove = mutableListOf<SpectrogramAnnotation>()
+        for (i in annotations.indices) {
+            val updated = annotations[i].copy(timeOffsetSeconds = annotations[i].timeOffsetSeconds + timeStep)
+            if (updated.timeOffsetSeconds > windowSeconds) {
+                toRemove.add(annotations[i])
+            } else {
+                annotations[i] = updated
+            }
+        }
+        annotations.removeAll(toRemove)
+
         while (columns.size > maxBufferTics) {
             columns.removeLast().recycle()
         }
@@ -237,18 +274,62 @@ fun Spectrogram(
                     val textY = (tickY - layout.size.height / 2f).coerceIn(0f, spectroH - layout.size.height)
                     drawText(layout, topLeft = Offset(spectroW + FREQ_LEGEND_TIC_WIDTH_PX * 2f, textY))
                 }
+
+                // Band annotations
+                BAND_LABELS.forEach { (freq, label) ->
+                    val tickY = if (state.scaleMode == SpectrogramScaleMode.LOG) {
+                        (spectroH - spectroH * ln(freq.toDouble() / fmin) / ln(r)).toFloat()
+                    } else {
+                        val cellByPx = cols[0].spectrum.size / spectroH.toDouble()
+                        (spectroH - freq / (cellByPx * state.hertzPerCell)).toFloat()
+                    }.coerceIn(0f, spectroH - 1f)
+
+                    drawLine(
+                        Color.White.copy(alpha = 0.2f),
+                        Offset(0f, tickY),
+                        Offset(spectroW, tickY),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
+                    )
+                    
+                    val labelLayout = textMeasurer.measure(
+                        label,
+                        TextStyle(color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
+                    )
+                    drawText(labelLayout, topLeft = Offset(4f, tickY - labelLayout.size.height))
+                }
+
+                // Dominant Frequency line
+                if (state.dominantFrequency > 0f) {
+                    val domY = if (state.scaleMode == SpectrogramScaleMode.LOG) {
+                        (spectroH - spectroH * ln(state.dominantFrequency.toDouble() / fmin) / ln(r)).toFloat()
+                    } else {
+                        val cellByPx = cols[0].spectrum.size / spectroH.toDouble()
+                        (spectroH - state.dominantFrequency / (cellByPx * state.hertzPerCell)).toFloat()
+                    }.coerceIn(0f, spectroH - 1f)
+
+                    drawLine(
+                        Color.Cyan.copy(alpha = 0.6f),
+                        Offset(0f, domY),
+                        Offset(spectroW, domY),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
             }
         }
 
         // Time legend
         var timeCursor = 0.0
-        val maxShownTime = (spectroW / ticW) * state.timeStep
+        val maxShownTime = (spectroW / state.pixelsPerTic) * state.timeStep
         val maxLabels = (spectroW / sampleTimeLabel.size.width).toInt().coerceAtLeast(1)
         val stepByLabel = ceil(maxShownTime / maxLabels).toInt().coerceAtLeast(1)
         var ticPrinted = 0
 
+        val columns = state.getColumns()
+        val bufferSize = columns.size.coerceAtLeast(1)
+        val scaledTicW = spectroW / bufferSize.toFloat()
+
         while (true) {
-            val xPos = spectroW - ticW * (timeCursor / state.timeStep).toFloat()
+            val xPos = spectroW - scaledTicW * (timeCursor / state.timeStep).toFloat()
             if (xPos < 0) break
             drawLine(Color.White, Offset(xPos, spectroH), Offset(xPos, spectroH + TIME_LEGEND_TIC_HEIGHT_PX))
             if (ticPrinted % stepByLabel == 0) {
@@ -259,6 +340,20 @@ fun Spectrogram(
             }
             timeCursor += 1.0
             ticPrinted++
+        }
+
+        // Draw annotations
+        state.annotations.forEach { ann ->
+            val xPos = spectroW - scaledTicW * (ann.timeOffsetSeconds / state.timeStep).toFloat()
+            if (xPos >= 0 && xPos <= spectroW) {
+                drawLine(ann.color, Offset(xPos, 0f), Offset(xPos, spectroH), strokeWidth = 2f)
+                val layout = textMeasurer.measure(
+                    ann.label,
+                    TextStyle(color = ann.color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                )
+                val textX = (xPos + 4f).coerceAtMost(spectroW - layout.size.width)
+                drawText(layout, topLeft = Offset(textX, 8f))
+            }
         }
     }
 }

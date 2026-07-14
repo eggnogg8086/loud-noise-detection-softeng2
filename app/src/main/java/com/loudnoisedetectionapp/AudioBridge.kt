@@ -5,6 +5,9 @@ import java.util.Collections
 object AudioBridge {
     @Volatile
     var currentDose = 0f
+    
+    @Volatile
+    var movementIntensity = 0f
 
     init {
         System.loadLibrary("noisecapture")

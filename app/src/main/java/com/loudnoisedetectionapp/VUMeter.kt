@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.max
@@ -40,14 +41,14 @@ fun VUMeter(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(32.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .height(48.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            // Level bar with color gradient (Green -> Yellow -> Red)
+            // Level bar with color gradient (Green -> Yellow -> Red) fixed to container
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(animatedLevel)
+                    .fillMaxWidth()
                     .fillMaxHeight()
                     .background(
                         brush = Brush.horizontalGradient(
@@ -59,17 +60,26 @@ fun VUMeter(
                         )
                     )
             )
+            
+            // Hider box to "unveil" the gradient
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(1f - animatedLevel)
+                    .fillMaxHeight()
+                    .align(Alignment.CenterEnd)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            )
         }
         
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
+                .padding(top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("${minDb.toInt()} dB", fontSize = 12.sp)
-            Text("${db.toInt()} dB", fontSize = 14.sp, style = MaterialTheme.typography.labelLarge)
-            Text("${maxDb.toInt()} dB", fontSize = 12.sp)
+            Text("${minDb.toInt()} dB", fontSize = 14.sp)
+            Text("${db.toInt()} dB", fontSize = 24.sp, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("${maxDb.toInt()} dB", fontSize = 14.sp)
         }
     }
 }
