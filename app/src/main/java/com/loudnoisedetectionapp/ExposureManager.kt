@@ -2,11 +2,13 @@ package com.loudnoisedetectionapp
 
 import android.content.Context
 import android.util.Log
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.*
 import kotlin.math.pow
 
 class ExposureManager(context: Context) {
     private val settings = SettingsManager(context)
+    private val history = HistoryManager(context)
     
     // In-memory cache to avoid frequent SharedPreferences reads/writes on audio thread
     private var cachedDose: Float = 0f
@@ -66,6 +68,10 @@ class ExposureManager(context: Context) {
         settings.dailyDose = cachedDose
         settings.lastDoseUpdate = System.currentTimeMillis()
         lastPersistTime = System.currentTimeMillis()
+
+        // Also update the daily total for today in history
+        val currentDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        history.saveDailyTotal(currentDateStr, cachedDose)
     }
 
     private fun checkDailyReset() {
@@ -73,6 +79,10 @@ class ExposureManager(context: Context) {
         val currentDay = getDayOfYear(now)
 
         if (lastUpdateDayOfYear != -1 && currentDay != lastUpdateDayOfYear) {
+            // Save the final dose for the day that just ended
+            val lastDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(settings.lastDoseUpdate))
+            history.saveDailyTotal(lastDateStr, cachedDose)
+
             cachedDose = 0f
             settings.dailyDose = 0f
             settings.doseNotifiedToday = false

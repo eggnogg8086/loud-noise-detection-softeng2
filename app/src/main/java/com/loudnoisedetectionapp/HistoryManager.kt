@@ -37,6 +37,11 @@ data class DoseSample(
         get() = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
 }
 
+data class DailyTotal(
+    val dateString: String,
+    val dose: Float
+)
+
 data class HistoryInsights(
     val avgDb: Float,
     val maxDb: Float,
@@ -113,6 +118,45 @@ class HistoryManager(context: Context) {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         return getDoseSamples().filter { 
             SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it.timestamp)) == today
+        }
+    }
+
+    fun saveDailyTotal(date: String, dose: Float) {
+        val totals = getDailyTotals().toMutableList()
+        // Replace if already exists for this date, otherwise add
+        val index = totals.indexOfFirst { it.dateString == date }
+        if (index != -1) {
+            totals[index] = DailyTotal(date, dose)
+        } else {
+            totals.add(DailyTotal(date, dose))
+        }
+
+        // Keep last 365 days
+        val start = if (totals.size > 365) totals.size - 365 else 0
+        val trimmed = totals.subList(start, totals.size)
+
+        val jsonArray = JSONArray()
+        trimmed.forEach { total ->
+            jsonArray.put(JSONObject().apply {
+                put("d", total.dateString)
+                put("v", total.dose.toDouble())
+            })
+        }
+        prefs.edit().putString("daily_totals", jsonArray.toString()).apply()
+    }
+
+    fun getDailyTotals(): List<DailyTotal> {
+        val jsonString = prefs.getString("daily_totals", "[]") ?: "[]"
+        return try {
+            val jsonArray = JSONArray(jsonString)
+            val list = mutableListOf<DailyTotal>()
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                list.add(DailyTotal(obj.getString("d"), obj.getDouble("v").toFloat()))
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 

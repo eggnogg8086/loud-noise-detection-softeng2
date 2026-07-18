@@ -12,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -27,6 +29,7 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
     var groupedEvents by remember { mutableStateOf(historyManager.getEventsGroupedByDay()) }
     val insights = remember(groupedEvents) { historyManager.getInsights() }
     val doseSamples = remember { historyManager.getDoseSamplesForToday() }
+    val dailyTotals = remember { historyManager.getDailyTotals() }
 
     Scaffold(
         topBar = {
@@ -68,6 +71,16 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                 if (doseSamples.isNotEmpty()) {
                     item {
                         DoseChart(samples = doseSamples)
+                    }
+                }
+
+                if (dailyTotals.size > 1) {
+                    item {
+                        TrendChart(
+                            title = "Weekly Trend (Daily Totals %)",
+                            totals = dailyTotals,
+                            days = 7
+                        )
                     }
                 }
 
@@ -160,6 +173,67 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TrendChart(title: String, totals: List<DailyTotal>, days: Int) {
+    val primaryColor = MaterialTheme.colorScheme.tertiary
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    
+    val displayTotals = remember(totals) {
+        val lastN = totals.takeLast(days)
+        // If we have fewer than 'days', pad with empty totals for visual consistency
+        if (lastN.size < days) {
+            List(days - lastN.size) { DailyTotal("", 0f) } + lastN
+        } else {
+            lastN
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(title, style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(8.dp))
+            Box(modifier = Modifier.fillMaxSize()) {
+                Canvas(modifier = Modifier.fillMaxSize().padding(bottom = 20.dp)) {
+                    val width = size.width
+                    val height = size.height
+                    val maxDose = (displayTotals.maxOfOrNull { it.dose } ?: 1f).coerceAtLeast(1f)
+                    
+                    if (displayTotals.isNotEmpty()) {
+                        val barWidth = width / days
+                        displayTotals.forEachIndexed { index, total ->
+                            if (total.dateString.isNotEmpty()) {
+                                val barHeight = (total.dose / maxDose) * height
+                                drawRect(
+                                    color = if (total.dose >= 1.0f) Color.Red else primaryColor,
+                                    topLeft = Offset(index * barWidth + 2.dp.toPx(), height - barHeight),
+                                    size = Size(barWidth - 4.dp.toPx(), barHeight)
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Labels
+                Row(
+                    modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val validTotals = displayTotals.filter { it.dateString.isNotEmpty() }
+                    if (validTotals.isNotEmpty()) {
+                        Text(validTotals.first().dateString.substring(5), fontSize = 10.sp, color = labelColor)
+                        Text(validTotals.last().dateString.substring(5), fontSize = 10.sp, color = labelColor)
                     }
                 }
             }
