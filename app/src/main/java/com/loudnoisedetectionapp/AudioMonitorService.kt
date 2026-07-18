@@ -15,14 +15,17 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-class AudioMonitorService : Service(), SensorEventListener {
+class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudioFocusChangeListener {
 
     companion object {
         private const val FOREGROUND_CHANNEL_ID = "audio_monitor_service"
@@ -44,6 +47,9 @@ class AudioMonitorService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private lateinit var audioManager: AudioManager
+    
     @Volatile
     private var currentMovementIntensity = 0f
     private var smoothedMovementIntensity = 0f
@@ -61,6 +67,19 @@ class AudioMonitorService : Service(), SensorEventListener {
 
     private var lastDoseSampleTime = 0L
     private val DOSE_SAMPLE_INTERVAL_MS = 60000L // 1 minute
+
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private val WATCHDOG_INTERVAL_MS = 30000L // Check every 30s
+    private val watchdogRunnable = object : Runnable {
+        override fun run() {
+            val now = System.currentTimeMillis()
+            if (lastCallbackTime != 0L && (now - lastCallbackTime > WATCHDOG_INTERVAL_MS)) {
+                Log.w("AudioMonitorService", "Watchdog detected stalled audio monitoring. Restarting...")
+                restartMonitoring()
+            }
+            watchdogHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_SERVICE) {
@@ -133,6 +152,12 @@ class AudioMonitorService : Service(), SensorEventListener {
         settingsManager = SettingsManager(this)
         exposureManager = ExposureManager(this)
         historyManager = HistoryManager(this)
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        // Initialize wake lock to prevent CPU sleep during long-term monitoring
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "NoiseMonitor:WakeLock")
+        wakeLock?.acquire(12 * 60 * 60 * 1000L) // 12 hours max safety timeout
 
         // Initialize accelerometer for handling noise compensation
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -143,6 +168,7 @@ class AudioMonitorService : Service(), SensorEventListener {
 
         logMicrophoneSpecs()
         startMonitoring()
+        watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_INTERVAL_MS)
     }
 
     private fun restartMonitoring() {
@@ -245,12 +271,30 @@ class AudioMonitorService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         println("SERVICE DESTROYED")
+        watchdogHandler.removeCallbacks(watchdogRunnable)
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
         sensorManager.unregisterListener(this)
+        audioManager.abandonAudioFocus(this)
         exposureManager?.persist()
         AudioBridge.removeCallback(serviceCallback)
         AudioBridge.stop()
         AudioBridge.destroy()
         super.onDestroy()
+    }
+
+    override fun onAudioFocusChange(focusChange: Int) {
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                Log.d("AudioMonitorService", "Audio focus gained, starting/resuming monitoring")
+                startMonitoring()
+            }
+            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                Log.d("AudioMonitorService", "Audio focus lost, stopping monitoring")
+                AudioBridge.stop()
+            }
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -270,6 +314,16 @@ class AudioMonitorService : Service(), SensorEventListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startMonitoring() {
+        val result = audioManager.requestAudioFocus(
+            this,
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+        )
+
+        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            Log.e("AudioMonitorService", "Could not gain audio focus, monitoring might be restricted")
+        }
+
         val deviceId = settingsManager?.selectedMicId ?: -1
         val preset = settingsManager?.audioPreset ?: 9
 

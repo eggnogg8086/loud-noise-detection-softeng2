@@ -5,7 +5,7 @@
 #include <vector>
 #include "kissfft/kiss_fftr.h"
 
-class AudioEngine : public oboe::AudioStreamDataCallback {
+class AudioEngine : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErrorCallback {
 public:
     static constexpr int kSampleRate   = 44100;
     static constexpr int kFftSize      = 8192;
@@ -23,6 +23,8 @@ public:
             oboe::AudioStream* stream,
             void* audioData,
             int32_t numFrames) override;
+
+    void onErrorAfterClose(oboe::AudioStream* stream, oboe::Result error) override;
 
 private:
     SpectrumCallback mCallback;

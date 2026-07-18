@@ -34,7 +34,8 @@ bool AudioEngine::start(int deviceId, int inputPreset) {
             ->setChannelCount(oboe::ChannelCount::Mono)
             ->setSampleRate(kSampleRate)
             ->setInputPreset(static_cast<oboe::InputPreset>(inputPreset))
-            ->setDataCallback(this);
+            ->setDataCallback(this)
+            ->setErrorCallback(this);
 
     if (deviceId != -1) {
         builder.setDeviceId(deviceId);
@@ -108,4 +109,15 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
         }
     }
     return oboe::DataCallbackResult::Continue;
+}
+
+void AudioEngine::onErrorAfterClose(oboe::AudioStream* stream, oboe::Result error) {
+    if (error == oboe::Result::ErrorDisconnected) {
+        LOGI("Audio stream disconnected, attempting to restart...");
+        // In a real scenario, you might want to notify the Java layer to restart
+        // with the correct parameters, but for now, we'll log it.
+        // The Service's AudioFocus listener or a Watchdog can also handle this.
+    } else {
+        LOGE("Audio stream error: %s", oboe::convertToText(error));
+    }
 }
