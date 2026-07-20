@@ -13,7 +13,10 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
 import android.media.RingtoneManager
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.MicrophoneInfo
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -21,6 +24,13 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import androidx.glance.appwidget.updateAll
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -49,6 +59,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
     private var accelerometer: Sensor? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var audioManager: AudioManager
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
     
     @Volatile
     private var currentMovementIntensity = 0f
@@ -64,9 +75,29 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
     private var episodeStartTime = 0L
     private var lastLoudTime = 0L
     private val EPISODE_TIMEOUT_MS = 8000L // End episode after 8s of quiet
+    
+    private var episodeLat: Double? = null
+    private var episodeLon: Double? = null
+    private var wasSelfNoiseInEpisode = false
 
     private var lastDoseSampleTime = 0L
     private val DOSE_SAMPLE_INTERVAL_MS = 60000L // 1 minute
+    
+    private var lastWidgetUpdateTime = 0L
+    private val WIDGET_UPDATE_INTERVAL_MS = 2000L
+
+    private var echoCanceler: AcousticEchoCanceler? = null
+    private var isSelfNoiseActive = false
+
+    private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
+        override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) {
+            // Check if any playback is active through speakers
+            isSelfNoiseActive = configs.any { config ->
+                config.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA
+            }
+            AudioBridge.isSelfNoiseActive = isSelfNoiseActive
+        }
+    }
 
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private val WATCHDOG_INTERVAL_MS = 30000L // Check every 30s
@@ -153,6 +184,9 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         exposureManager = ExposureManager(this)
         historyManager = HistoryManager(this)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        audioManager.registerAudioPlaybackCallback(playbackCallback, Handler(Looper.getMainLooper()))
 
         // Initialize wake lock to prevent CPU sleep during long-term monitoring
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -176,7 +210,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         startMonitoring()
     }
 
-    private val serviceCallback = AudioBridge.SpectrumCallback { spectrum, db ->
+    private val serviceCallback = AudioBridge.SpectrumCallback { spectrum, db, balance ->
         val now = System.currentTimeMillis()
 
         // Movement-based noise compensation
@@ -193,6 +227,13 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             }
         }
         lastCallbackTime = now
+
+        // Widget Update
+        if (now - lastWidgetUpdateTime > WIDGET_UPDATE_INTERVAL_MS) {
+            val dose = exposureManager?.getCurrentDose() ?: 0f
+            updateWidget(compensatedDb, dose)
+            lastWidgetUpdateTime = now
+        }
 
         // Dose sampling
         if (now - lastDoseSampleTime > DOSE_SAMPLE_INTERVAL_MS) {
@@ -212,31 +253,60 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
                 episodeF1Sum = freqs.first
                 episodeF2Sum = freqs.second
                 episodeSampleCount = 1
+                wasSelfNoiseInEpisode = isSelfNoiseActive
+
+                AudioBridge.startRecording()
+                
+                // Fetch location for this episode
+                try {
+                    fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                        .addOnSuccessListener { location ->
+                            if (location != null) {
+                                episodeLat = location.latitude
+                                episodeLon = location.longitude
+                            }
+                        }
+                } catch (e: SecurityException) {
+                    Log.w("AudioMonitorService", "Location permission not granted for tagging")
+                }
             } else {
                 episodeMaxDb = maxOf(episodeMaxDb, compensatedDb)
                 val freqs = findTopFrequencies(spectrum)
                 episodeF1Sum += freqs.first
                 episodeF2Sum += freqs.second
                 episodeSampleCount++
+                if (isSelfNoiseActive) wasSelfNoiseInEpisode = true
             }
         } else {
             if (isLoudEpisodeActive && (now - lastLoudTime > EPISODE_TIMEOUT_MS)) {
                 // End Episode
                 val duration = (lastLoudTime - episodeStartTime) / 1000f
                 if (duration > (settingsManager?.durationSeconds ?: 1f)) {
+                    val snippetFileName = "noise_${System.currentTimeMillis()}.wav"
+                    val snippetFile = java.io.File(cacheDir, snippetFileName)
+                    val saved = AudioBridge.saveSnippet(snippetFile.absolutePath)
+                    val snippetPath = if (saved) snippetFile.absolutePath else null
+
                     historyManager?.addEvent(
                         episodeMaxDb,
                         episodeF1Sum / episodeSampleCount,
                         episodeF2Sum / episodeSampleCount,
-                        duration
+                        duration,
+                        episodeLat,
+                        episodeLon,
+                        snippetPath,
+                        wasSelfNoiseInEpisode
                     )
-                    
+
                     if (now - lastNotificationTime > NOTIFICATION_COOLDOWN) {
                         sendLoudNoiseNotification(episodeMaxDb.toDouble(), duration)
                         lastNotificationTime = now
                     }
                 }
                 isLoudEpisodeActive = false
+                episodeLat = null
+                episodeLon = null
+                wasSelfNoiseInEpisode = false
             }
         }
     }
@@ -275,8 +345,10 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }
+        audioManager.unregisterAudioPlaybackCallback(playbackCallback)
         sensorManager.unregisterListener(this)
         audioManager.abandonAudioFocus(this)
+        releaseEchoCanceler()
         exposureManager?.persist()
         AudioBridge.removeCallback(serviceCallback)
         AudioBridge.stop()
@@ -313,6 +385,49 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun updateWidget(db: Float, dose: Float) {
+        val prefs = getSharedPreferences("widget_data", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putFloat("current_db", db)
+            .putFloat("current_dose", dose)
+            .apply()
+        
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                NoiseWidget().updateAll(this@AudioMonitorService)
+            } catch (e: Exception) {
+                // Ignore widget update errors
+            }
+        }
+    }
+
+    private fun manageAcousticEchoCanceler() {
+        if (settingsManager?.speakerCompensationEnabled == false) {
+            releaseEchoCanceler()
+            return
+        }
+
+        val sessionId = AudioBridge.getSessionId()
+        if (sessionId > 0) {
+            if (AcousticEchoCanceler.isAvailable()) {
+                releaseEchoCanceler()
+                try {
+                    echoCanceler = AcousticEchoCanceler.create(sessionId)
+                    echoCanceler?.enabled = true
+                    Log.d("AudioMonitorService", "AcousticEchoCanceler enabled on session $sessionId")
+                } catch (e: Exception) {
+                    Log.e("AudioMonitorService", "Failed to create AcousticEchoCanceler", e)
+                }
+            }
+        }
+    }
+
+    private fun releaseEchoCanceler() {
+        echoCanceler?.enabled = false
+        echoCanceler?.release()
+        echoCanceler = null
+    }
+
     private fun startMonitoring() {
         val result = audioManager.requestAudioFocus(
             this,
@@ -326,9 +441,37 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
 
         val deviceId = settingsManager?.selectedMicId ?: -1
         val preset = settingsManager?.audioPreset ?: 9
+        val (sensitivity, freqs, gains) = fetchMicrophoneInfo(deviceId)
+        val useAWeighting = settingsManager?.useAWeighting ?: true
 
         AudioBridge.addCallback(serviceCallback)
-        AudioBridge.start(deviceId, preset)
+        if (AudioBridge.start(deviceId, preset, sensitivity, freqs, gains, useAWeighting)) {
+            manageAcousticEchoCanceler()
+        }
+    }
+
+    private fun fetchMicrophoneInfo(deviceId: Int): Triple<Float, FloatArray?, FloatArray?> {
+        val mics = audioManager.microphones
+        val micInfo = if (deviceId != -1) {
+            mics.find { it.id == deviceId }
+        } else {
+            // Find the built-in mic that is likely the default
+            mics.find { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+        }
+
+        return if (micInfo != null) {
+            val freqResponse = micInfo.frequencyResponse
+            val freqs = FloatArray(freqResponse.size)
+            val gains = FloatArray(freqResponse.size)
+            freqResponse.forEachIndexed { index, pair ->
+                freqs[index] = pair.first
+                gains[index] = pair.second
+            }
+            Log.d("AudioMonitorService", "Using Mic: ${micInfo.description}, Sensitivity: ${micInfo.sensitivity}dBFS")
+            Triple(micInfo.sensitivity, freqs, gains)
+        } else {
+            Triple(-999f, null, null)
+        }
     }
 
     private fun sendLoudNoiseNotification(db: Double, duration: Float) {
@@ -393,6 +536,16 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             .build()
     }
 
+    private fun getMicLocationString(location: Int): String {
+        return when (location) {
+            1 -> "Main Body"
+            2 -> "Front"
+            3 -> "Back"
+            4 -> "External"
+            else -> "Unknown"
+        }
+    }
+
     private fun logMicrophoneSpecs() {
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val devices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
@@ -417,6 +570,12 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             Log.d("AudioMonitorService", "  Sample Rates: $sampleRates")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 Log.d("AudioMonitorService", "  Address: ${device.address}")
+                val mics = audioManager.microphones
+                mics.find { it.id == device.id }?.let { micInfo ->
+                    Log.d("AudioMonitorService", "  Sensitivity: ${micInfo.sensitivity} dBFS")
+                    Log.d("AudioMonitorService", "  Location: ${getMicLocationString(micInfo.location)}")
+                    Log.d("AudioMonitorService", "  Freq Response Points: ${micInfo.frequencyResponse.size}")
+                }
             }
         }
         Log.d("AudioMonitorService", "---------------------------------------")

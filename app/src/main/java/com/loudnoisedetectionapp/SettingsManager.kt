@@ -19,6 +19,8 @@ class SettingsManager(context: Context) {
         private const val KEY_DAILY_DOSE = "daily_dose"
         private const val KEY_LAST_DOSE_UPDATE = "last_dose_update"
         private const val KEY_DOSE_NOTIFIED_TODAY = "dose_notified_today"
+        private const val KEY_USE_A_WEIGHTING = "use_a_weighting"
+        private const val KEY_SPEAKER_COMPENSATION = "speaker_compensation"
         
         // Default to -1 (Auto/Default)
         const val MIC_ID_AUTO = -1
@@ -67,4 +69,12 @@ class SettingsManager(context: Context) {
     var doseNotifiedToday: Boolean
         get() = prefs.getBoolean(KEY_DOSE_NOTIFIED_TODAY, false)
         set(value) = prefs.edit().putBoolean(KEY_DOSE_NOTIFIED_TODAY, value).apply()
+
+    var useAWeighting: Boolean
+        get() = prefs.getBoolean(KEY_USE_A_WEIGHTING, true) // Default to true for dBA
+        set(value) = prefs.edit().putBoolean(KEY_USE_A_WEIGHTING, value).apply()
+
+    var speakerCompensationEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SPEAKER_COMPENSATION, true)
+        set(value) = prefs.edit().putBoolean(KEY_SPEAKER_COMPENSATION, value).apply()
 }

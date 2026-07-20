@@ -11,7 +11,11 @@ data class NoiseEvent(
     val db: Float,
     val freq1: Float,
     val freq2: Float,
-    val durationSeconds: Float = 0f
+    val durationSeconds: Float = 0f,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val audioPath: String? = null,
+    val isSelfNoise: Boolean = false
 ) {
     val dateString: String
         get() = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(timestamp))
@@ -53,8 +57,8 @@ data class HistoryInsights(
 class HistoryManager(context: Context) {
     private val prefs = context.getSharedPreferences("noise_history", Context.MODE_PRIVATE)
 
-    fun addEvent(db: Float, f1: Float, f2: Float, duration: Float) {
-        val event = NoiseEvent(System.currentTimeMillis() - (duration * 1000).toLong(), db, f1, f2, duration)
+    fun addEvent(db: Float, f1: Float, f2: Float, duration: Float, lat: Double? = null, lon: Double? = null, audio: String? = null, isSelfNoise: Boolean = false) {
+        val event = NoiseEvent(System.currentTimeMillis() - (duration * 1000).toLong(), db, f1, f2, duration, lat, lon, audio, isSelfNoise)
         val events = getAllEvents().toMutableList()
         events.add(event)
         saveEvents(events)
@@ -72,7 +76,11 @@ class HistoryManager(context: Context) {
                     obj.getDouble("d").toFloat(),
                     obj.getDouble("f1").toFloat(),
                     obj.getDouble("f2").toFloat(),
-                    obj.optDouble("dur", 0.0).toFloat()
+                    obj.optDouble("dur", 0.0).toFloat(),
+                    if (obj.has("lat")) obj.getDouble("lat") else null,
+                    if (obj.has("lon")) obj.getDouble("lon") else null,
+                    if (obj.has("path")) obj.getString("path") else null,
+                    obj.optBoolean("self", false)
                 ))
             }
             list
@@ -123,7 +131,6 @@ class HistoryManager(context: Context) {
 
     fun saveDailyTotal(date: String, dose: Float) {
         val totals = getDailyTotals().toMutableList()
-        // Replace if already exists for this date, otherwise add
         val index = totals.indexOfFirst { it.dateString == date }
         if (index != -1) {
             totals[index] = DailyTotal(date, dose)
@@ -131,7 +138,6 @@ class HistoryManager(context: Context) {
             totals.add(DailyTotal(date, dose))
         }
 
-        // Keep last 365 days
         val start = if (totals.size > 365) totals.size - 365 else 0
         val trimmed = totals.subList(start, totals.size)
 
@@ -143,6 +149,34 @@ class HistoryManager(context: Context) {
             })
         }
         prefs.edit().putString("daily_totals", jsonArray.toString()).apply()
+    }
+
+    fun saveDoseBreakdown(date: String, breakdown: Map<String, Float>) {
+        val allBreakdowns = prefs.getString("dose_breakdowns", "{}") ?: "{}"
+        val root = JSONObject(allBreakdowns)
+        val dayObj = JSONObject()
+        breakdown.forEach { (range, value) ->
+            dayObj.put(range, value.toDouble())
+        }
+        root.put(date, dayObj)
+        prefs.edit().putString("dose_breakdowns", root.toString()).apply()
+    }
+
+    fun getDoseBreakdown(date: String): Map<String, Float> {
+        val allBreakdowns = prefs.getString("dose_breakdowns", "{}") ?: "{}"
+        return try {
+            val root = JSONObject(allBreakdowns)
+            val dayObj = root.optJSONObject(date) ?: return emptyMap()
+            val map = mutableMapOf<String, Float>()
+            val keys = dayObj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                map[key] = dayObj.getDouble(key).toFloat()
+            }
+            map
+        } catch (e: Exception) {
+            emptyMap()
+        }
     }
 
     fun getDailyTotals(): List<DailyTotal> {
@@ -167,10 +201,6 @@ class HistoryManager(context: Context) {
         val avgDb = events.map { it.db }.average().toFloat()
         val maxDb = events.maxOf { it.db }
         
-        // Find most frequent primary frequency (excluding 0Hz/Invalid) rounded to nearest 100Hz
-        val freqMap = events.filter { it.freq1 > 20f }.groupBy { (it.freq1 / 100).toInt() * 100 }
-        val mostFrequentHz = freqMap.maxByOrNull { it.value.size }?.key?.toFloat() ?: 0f
-
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val eventsToday = events.filter { it.dateString == today }.size
         val eventsYesterday = events.filter { 
@@ -185,6 +215,13 @@ class HistoryManager(context: Context) {
             else -> "Noise activity is stable."
         }
 
+        // Find most frequent primary frequency (excluding 0Hz/Invalid) rounded to nearest 50Hz
+        val validEvents = events.filter { it.freq1 > 25f }
+        val mostFrequentHz = if (validEvents.isNotEmpty()) {
+            val freqMap = validEvents.groupBy { Math.round(it.freq1 / 50f) * 50 }
+            freqMap.maxByOrNull { it.value.size }?.key?.toFloat() ?: 0f
+        } else 0f
+
         return HistoryInsights(avgDb, maxDb, mostFrequentHz, events.size, trend)
     }
 
@@ -194,7 +231,6 @@ class HistoryManager(context: Context) {
 
     private fun saveEvents(events: List<NoiseEvent>) {
         val jsonArray = JSONArray()
-        // Limit history to last 1000 events
         val start = if (events.size > 1000) events.size - 1000 else 0
         for (i in start until events.size) {
             val event = events[i]
@@ -204,6 +240,10 @@ class HistoryManager(context: Context) {
                 put("f1", event.freq1.toDouble())
                 put("f2", event.freq2.toDouble())
                 put("dur", event.durationSeconds.toDouble())
+                event.latitude?.let { put("lat", it) }
+                event.longitude?.let { put("lon", it) }
+                event.audioPath?.let { put("path", it) }
+                if (event.isSelfNoise) put("self", true)
             }
             jsonArray.put(obj)
         }

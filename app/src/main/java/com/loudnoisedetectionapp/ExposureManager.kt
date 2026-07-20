@@ -12,12 +12,15 @@ class ExposureManager(context: Context) {
     
     // In-memory cache to avoid frequent SharedPreferences reads/writes on audio thread
     private var cachedDose: Float = 0f
+    private var cachedBreakdown = mutableMapOf<String, Float>()
     private var lastPersistTime: Long = 0L
     private val PERSIST_INTERVAL_MS = 5000L // Persist every 5 seconds
     private var lastUpdateDayOfYear: Int = -1
 
     init {
         cachedDose = settings.dailyDose
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        cachedBreakdown = history.getDoseBreakdown(todayStr).toMutableMap()
         lastUpdateDayOfYear = getDayOfYear(settings.lastDoseUpdate)
         checkDailyReset()
     }
@@ -39,6 +42,17 @@ class ExposureManager(context: Context) {
         val deltaDose = durationSeconds.toDouble() / allowedSeconds
 
         cachedDose += deltaDose.toFloat()
+        
+        // Update Breakdown
+        val bin = when {
+            db < 85f -> "< 85 dB"
+            db < 90f -> "85-90 dB"
+            db < 95f -> "90-95 dB"
+            db < 100f -> "95-100 dB"
+            else -> "> 100 dB"
+        }
+        cachedBreakdown[bin] = (cachedBreakdown[bin] ?: 0f) + deltaDose.toFloat()
+
         AudioBridge.currentDose = cachedDose
         
         // Persist occasionally to avoid hammering disk
@@ -72,6 +86,7 @@ class ExposureManager(context: Context) {
         // Also update the daily total for today in history
         val currentDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         history.saveDailyTotal(currentDateStr, cachedDose)
+        history.saveDoseBreakdown(currentDateStr, cachedBreakdown)
     }
 
     private fun checkDailyReset() {
@@ -82,8 +97,10 @@ class ExposureManager(context: Context) {
             // Save the final dose for the day that just ended
             val lastDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(settings.lastDoseUpdate))
             history.saveDailyTotal(lastDateStr, cachedDose)
+            history.saveDoseBreakdown(lastDateStr, cachedBreakdown)
 
             cachedDose = 0f
+            cachedBreakdown.clear()
             settings.dailyDose = 0f
             settings.doseNotifiedToday = false
             settings.lastDoseUpdate = now

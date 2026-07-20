@@ -32,6 +32,12 @@ class AudioViewModel : ViewModel() {
     var currentNoiseType by mutableStateOf("Ambient")
         private set
 
+    var isSelfNoiseActive by mutableStateOf(false)
+        private set
+
+    var stereoBalance by mutableFloatStateOf(0f)
+        private set
+
     private var calibrationManager: CalibrationManager? = null
     private var settingsManager: SettingsManager? = null
 
@@ -51,10 +57,12 @@ class AudioViewModel : ViewModel() {
     private var lastAnnotationTime = 0L
     private val ANNOTATION_THROTTLE_MS = 2000L
 
-    private val callback = AudioBridge.SpectrumCallback { spectrum, db ->
+    private val callback = AudioBridge.SpectrumCallback { spectrum, db, balance ->
         val now = System.currentTimeMillis()
         viewModelScope.launch(Dispatchers.Main) {
             currentDb = db
+            isSelfNoiseActive = AudioBridge.isSelfNoiseActive
+            stereoBalance = balance
             if (db > maxDb) {
                 maxDb = db
                 calibrationManager?.maxRecordedDb = db

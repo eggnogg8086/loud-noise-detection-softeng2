@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.MicrophoneInfo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +26,7 @@ fun SettingsScreen(
     
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val inputDevices = remember { audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS) }
+    val microphones = remember { audioManager.microphones }
 
     var selectedMicId by remember { mutableStateOf(settingsManager.selectedMicId) }
     var selectedPreset by remember { mutableStateOf(settingsManager.audioPreset) }
@@ -32,6 +34,8 @@ fun SettingsScreen(
     var duration by remember { mutableStateOf(settingsManager.durationSeconds) }
     var nioshEnabled by remember { mutableStateOf(settingsManager.nioshEnabled) }
     var nioshRatio by remember { mutableStateOf(settingsManager.nioshRatio) }
+    var useAWeighting by remember { mutableStateOf(settingsManager.useAWeighting) }
+    var speakerCompensation by remember { mutableStateOf(settingsManager.speakerCompensationEnabled) }
 
     val presets = listOf(
         "Unprocessed" to 9,
@@ -104,6 +108,56 @@ fun SettingsScreen(
             }
 
             item {
+                Text("Audio Accuracy", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Use A-Weighting (dBA)")
+                        Text(
+                            "Adjusts dB for human ear sensitivity (NIOSH standard).",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = useAWeighting,
+                        onCheckedChange = {
+                            useAWeighting = it
+                            settingsManager.useAWeighting = it
+                            notifyService(context)
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Speaker Compensation")
+                        Text(
+                            "Reduces false alerts from the phone's own speakers.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = speakerCompensation,
+                        onCheckedChange = {
+                            speakerCompensation = it
+                            settingsManager.speakerCompensationEnabled = it
+                            notifyService(context)
+                        }
+                    )
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
+
+            item {
                 Text("Alert Threshold: ${threshold.toInt()} dB", style = MaterialTheme.typography.titleMedium)
                 Slider(
                     value = threshold,
@@ -147,8 +201,14 @@ fun SettingsScreen(
                 )
 
                 inputDevices.forEach { device ->
+                    val micInfo = microphones.find { it.id == device.id }
+                    val locStr = micInfo?.let { getMicLocationString(it.location) } ?: ""
+                    val infoSuffix = micInfo?.let { 
+                        " ($locStr, ${it.sensitivity.toInt()}dBFS)"
+                    } ?: ""
+                    
                     MicRadioButton(
-                        label = "${device.productName} (${getDeviceTypeName(device.type)})",
+                        label = "${device.productName}$infoSuffix",
                         selected = selectedMicId == device.id,
                         onClick = {
                             selectedMicId = device.id
@@ -216,5 +276,15 @@ private fun getDeviceTypeName(type: Int): String {
         AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired Headset"
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth"
         else -> "Other"
+    }
+}
+
+private fun getMicLocationString(location: Int): String {
+    return when (location) {
+        1 -> "Main Body"
+        2 -> "Front"
+        3 -> "Back"
+        4 -> "External"
+        else -> "Unknown"
     }
 }
