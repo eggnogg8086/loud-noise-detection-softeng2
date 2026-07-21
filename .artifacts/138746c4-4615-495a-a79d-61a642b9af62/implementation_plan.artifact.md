@@ -1,59 +1,52 @@
-# Implementation Plan - Intelligent Mic Selection & Stereo Monitoring
+# Implementation Plan - Accurate Noise Rejection & Consistent UI
 
-Enhance the audio capture pipeline to support high-fidelity stereo monitoring and provide users with detailed information about microphone hardware locations.
+Ensure that the decibel value shown in the UI, used for notifications, and calculated for the NIOSH dose is the most accurate "Clean" value, incorporating both stereo noise rejection and device movement compensation.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> - **Stereo Support**: While many modern devices support stereo input, some budget or older devices are strictly Mono. The app will automatically detect and fall back to Mono if needed.
-> - **CPU Usage**: Processing two channels instead of one (FFT and RMS calculations) will slightly increase CPU and battery consumption.
+> - **Unified Compensation**: The main dB meter will now show the final "Clean" value after all digital filtering (Stereo Rejection + Movement Compensation).
+> - **Sensitivity Increase**: The "Intelligent Noise Rejection" in the native engine will be made more aggressive to better filter out finger rubs and wind.
+> - **Consistent Data**: Notifications and Daily Dose will now be 100% synchronized with the value shown on the main screen.
 
 ## Proposed Changes
 
 ### Native Audio Engine (C++)
 
 #### [MODIFY] [AudioEngine.h](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/cpp/AudioEngine.h)
-- Update members to handle stereo buffers (interleaved data).
-- Add support for per-channel RMS and Peak calculation.
+- Add `mMovementIntensity` member.
+- Add `setMovementIntensity(float intensity)` method.
 
 #### [MODIFY] [AudioEngine.cpp](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/cpp/AudioEngine.cpp)
-- Change `AudioStreamBuilder` to request `ChannelCount::Stereo`.
-- Implement interleaved sample processing in `onAudioReady`.
-- Calculate `leftDb` and `rightDb` independently.
-- The `mCallback` will now return the **Maximum** of the two channels as the primary dB value, plus a **Stereo Balance** factor (-1.0 for Left to 1.0 for Right).
-
-### JNI & Kotlin Bridge
+- **Refined Stereo Rejection**:
+    - Compare per-channel RMS levels. If the ratio between channels exceeds 6dB, apply a spatial rejection penalty.
+    - This is much more effective than the current Mid-Side comparison for rejecting finger rubs on a single mic.
+- **Movement Compensation**:
+    - Integrate the movement-based attenuation directly into the C++ `dbSPL` calculation: `dbSPL -= (mMovementIntensity * 2.5f)`.
+    - This ensures the value emitted by the native engine is already fully compensated.
 
 #### [MODIFY] [AudioBridge.cpp](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/cpp/AudioBridge.cpp)
-- Update the callback interface to pass stereo balance data to Kotlin.
+- Add `nativeSetMovementIntensity` to pass the sensor data down to the engine.
+
+### Audio Bridge & Service
 
 #### [MODIFY] [AudioBridge.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioBridge.kt)
-- Add `stereoBalance` volatile property.
-
-### Audio Monitoring Service
+- Update `movementIntensity` setter to call the native method.
 
 #### [MODIFY] [AudioMonitorService.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioMonitorService.kt)
-- Enhance `logMicrophoneSpecs` and `fetchMicrophoneInfo` to extract `MicrophoneInfo.getLocation()` and `MicrophoneInfo.getDeviceLocation()`.
-- Implement a helper to map location constants (e.g., `LOCATION_MAINBODY_FRONT`) to user-friendly strings.
+- Remove the Kotlin-side movement compensation logic.
+- Directly use the `db` value received from the callback for all logic (Dose, Alerts, Episodes).
 
-### UI Improvements
-
-#### [MODIFY] [SettingsScreen.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/SettingsScreen.kt)
-- Update the microphone list to display the hardware location (e.g., "Built-in Mic (Front)").
+### UI & ViewModel
 
 #### [MODIFY] [AudioViewModel.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioViewModel.kt)
-- Add `stereoBalance` state (float).
-
-#### [MODIFY] [LoudNoiseDetectorScreen.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/LoudNoiseDetectorScreen.kt)
-- Add a subtle **Stereo Balance Meter** below the main dB reading. This will show as a horizontal bar that shifts left/right based on where the noise is loudest.
+- Ensure `currentDb` uses the compensated value from the callback.
+- Add a "Raw" dB indicator (smaller, grey text) if the user is in "Calibration" mode or advanced settings, to allow for hardware verification.
 
 ## Verification Plan
 
-### Automated Tests
-- Unit test to ensure `stereoBalance` is calculated correctly (e.g., Left-only signal results in -1.0).
-- Verify fallback logic by simulating a Mono-only `AudioStream`.
-
 ### Manual Verification
-- **Directional Test**: Snap fingers on the left and right sides of the phone and verify the Balance Meter responds accurately.
-- **Hardware List**: Check the Settings screen to see if microphone locations are correctly identified and displayed.
-- **Accuracy Check**: Ensure the primary dB reading reflects the loudest channel (Peak) rather than the average.
+- **The Finger Test**: Rub one mic. Verify the main dB reading stays low (rejected by stereo logic).
+- **The Shake Test**: Shake the phone. Verify the main dB reading drops (compensated by movement logic).
+- **Notification Check**: Trigger a loud noise alert and verify the dB in the notification matches the large number shown on the main screen.
+- **Dose Check**: Verify the % Dose increases according to the *clean* signal, not the raw noise.

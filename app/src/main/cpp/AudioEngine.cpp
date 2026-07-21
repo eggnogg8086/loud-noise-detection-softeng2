@@ -28,9 +28,14 @@ AudioEngine::~AudioEngine() {
 
 bool AudioEngine::start(int deviceId, int inputPreset, float sensitivity,
                          const std::vector<float>& freqs, const std::vector<float>& gains,
-                         bool useAWeighting) {
+                         bool useAWeighting, bool useNoiseRejection,
+                         float calibrationOffset, int integrationTime) {
     mSensitivity = sensitivity;
     mUseAWeighting = useAWeighting;
+    mUseNoiseRejection = useNoiseRejection;
+    mCalibrationOffset = calibrationOffset;
+    mIntegrationTime = integrationTime;
+    mIsFirstBuffer = true;
 
     float binWidth = (float)kSampleRate / kFftSize;
 
@@ -115,6 +120,10 @@ int AudioEngine::getSessionId() const {
     return mStream ? mStream->getSessionId() : -1;
 }
 
+void AudioEngine::setMovementIntensity(float intensity) {
+    mMovementIntensity = intensity;
+}
+
 void AudioEngine::startRecordingSnippet() {
     mEpisodeBuffer.clear();
     mIsRecordingEpisode = true;
@@ -162,6 +171,21 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
         mEnergyCount++;
 
         float monoMix = (left + right) * 0.5f;
+
+        // Intelligent Noise Rejection (Differential signaling)
+        bool currentSampleRejected = false;
+        if (mUseNoiseRejection && channelCount == 2) {
+            // Refined rejection: Compare per-sample energy imbalance
+            float energyL = left * left;
+            float energyR = right * right;
+            float ratio = (energyL + 1e-9f) / (energyR + 1e-9f);
+
+            if (ratio > 4.0f || ratio < 0.25f) {
+                monoMix *= 0.5f; // Apply 6dB penalty for uncorrelated noise
+                currentSampleRejected = true;
+                mRejectionActive = true;
+            }
+        }
 
         // Fill circular buffer (mono for snippets)
         mCircularBuffer[mCircularBufferPos] = monoMix;
@@ -221,9 +245,40 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
             float effectiveSensitivity = (mSensitivity < -900.f) ? -37.0f : mSensitivity;
             float dbSPL = 20.f * log10f(fmaxf(rmsWeighted, 1e-10f)) + 94.f - effectiveSensitivity;
 
+            // Apply Manual Calibration Offset
+            dbSPL += mCalibrationOffset;
+
+            float dbRaw = dbSPL; // Store raw value before movement compensation
+
+            // Apply Movement Compensation directly in native engine
+            dbSPL -= (mMovementIntensity * 2.5f);
+
+            float dbAlert = dbSPL; // Immediate value for alerts (movement-compensated)
+
+            // Apply Smoothing (Integration Time)
+            // Fast: 125ms (~0.8 alpha for ~0.1s update)
+            // Slow: 1000ms (~0.1 alpha for ~1.0s update)
+            float alpha = (mIntegrationTime == 1) ? 0.1f : 0.8f;
+
+            if (mIsFirstBuffer) {
+                mSmoothedDb = dbSPL;
+                mIsFirstBuffer = false;
+            } else {
+                mSmoothedDb = alpha * dbSPL + (1.0f - alpha) * mSmoothedDb;
+            }
+
+            dbSPL = mSmoothedDb;
+
+            if (dbSPL < 0.0f) dbSPL = 0.0f; // Clamp to silent floor
+            if (dbAlert < 0.0f) dbAlert = 0.0f;
+
             // Calculate Stereo Balance: -1.0 (Left) to 1.0 (Right)
             float rmsL = sqrtf(mLeftSumSq / mEnergyCount);
             float rmsR = sqrtf(mRightSumSq / mEnergyCount);
+
+            float dbL = 20.f * log10f(fmaxf(rmsL, 1e-10f)) + 94.f - effectiveSensitivity + mCalibrationOffset;
+            float dbR = 20.f * log10f(fmaxf(rmsR, 1e-10f)) + 94.f - effectiveSensitivity + mCalibrationOffset;
+
             float balance = 0.0f;
             if (rmsL + rmsR > 1e-6f) {
                 balance = (rmsR - rmsL) / (rmsL + rmsR);
@@ -234,7 +289,8 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
             mRightSumSq = 0;
             mEnergyCount = 0;
 
-            mCallback(spectrum.data(), kSpectrumSize, dbSPL, balance);
+            mCallback(spectrum.data(), kSpectrumSize, dbSPL, dbRaw, dbAlert, dbL, dbR, balance, mRejectionActive, channelCount);
+            mRejectionActive = false; // Reset for next buffer
         }
     }
     return oboe::DataCallbackResult::Continue;

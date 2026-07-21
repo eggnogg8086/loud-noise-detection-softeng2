@@ -1,13 +1,10 @@
-- [x] Phase 1: Stereo Native Engine
-    - [x] Update `AudioEngine.h` for stereo buffers and member variables
-    - [x] Update `AudioEngine.cpp` for interleaved processing and balance calculation
-- [x] Phase 2: Hardware Location Awareness
-    - [x] Enhance `AudioMonitorService.kt` to extract `MicrophoneInfo` location data
-    - [x] Map location constants to user-friendly strings
-- [x] Phase 3: JNI & Bridge Updates
-    - [x] Update `AudioBridge.cpp` callback to pass balance
-    - [x] Update `AudioBridge.kt` with `stereoBalance` property
-- [x] Phase 4: UI Enhancements
-    - [x] Update `SettingsScreen.kt` to show mic locations
-    - [x] Update `AudioViewModel.kt` to track balance
-    - [x] Implement `StereoBalanceMeter` in `LoudNoiseDetectorScreen.kt`
+- [x] Phase 1: Native Engine Refinement (C++)
+    - [x] Update `AudioEngine.h` with movement intensity members
+    - [x] Update `AudioEngine.cpp` with refined stereo rejection and movement compensation
+- [x] Phase 2: Bridge & Service Integration
+    - [x] Update `AudioBridge.cpp` and `AudioBridge.kt` to pass movement data to native
+    - [x] Remove redundant compensation in `AudioMonitorService.kt`
+- [x] Phase 3: Consistent UI & Logic
+    - [x] Verify Notifications and Dose logic use the new unified `db` value
+- [x] Phase 4: Verification
+    - [x] Build and perform "The Finger Test" and "The Shake Test"

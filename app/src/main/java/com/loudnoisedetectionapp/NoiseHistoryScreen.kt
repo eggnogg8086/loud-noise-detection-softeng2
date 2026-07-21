@@ -9,7 +9,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MusicOff
+import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.*
 import android.content.Intent
 import android.net.Uri
@@ -25,7 +28,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -34,15 +39,51 @@ import java.util.*
 fun NoiseHistoryScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val historyManager = remember { HistoryManager(context) }
+    val settingsManager = remember { SettingsManager(context) }
+    
     var groupedEvents by remember { mutableStateOf(historyManager.getEventsGroupedByDay()) }
-    val insights = remember(groupedEvents) { historyManager.getInsights() }
-    val doseSamples = remember { historyManager.getDoseSamplesForToday() }
-    val dailyTotals = remember { historyManager.getDailyTotals() }
+    var doseSamples by remember { mutableStateOf(historyManager.getDoseSamplesForToday()) }
+    var dailyTotals by remember { mutableStateOf(historyManager.getDailyTotals()) }
 
     val today = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
-    val doseBreakdown = remember { historyManager.getDoseBreakdown(today) }
+    var doseBreakdown by remember { mutableStateOf(historyManager.getDoseBreakdown(today)) }
+    
+    val insights = remember(groupedEvents) { historyManager.getInsights() }
 
-    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+    // Audio Playback State
+    var playingAudioPath by remember { mutableStateOf<String?>(null) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableLongStateOf(0L) }
+    var totalDuration by remember { mutableLongStateOf(0L) }
+
+    val exoPlayer = remember { 
+        ExoPlayer.Builder(context).build().apply {
+            addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(playing: Boolean) {
+                    isPlaying = playing
+                    if (playing) {
+                        totalDuration = duration.coerceAtLeast(0)
+                    }
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_ENDED) {
+                        isPlaying = false
+                        currentPosition = 0
+                    }
+                }
+            })
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            while (isPlaying) {
+                currentPosition = exoPlayer.currentPosition
+                delay(200)
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose { exoPlayer.release() }
     }
@@ -59,7 +100,11 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                 actions = {
                     IconButton(onClick = {
                         historyManager.clearHistory()
+                        settingsManager.clearDailyDose()
                         groupedEvents = emptyMap()
+                        doseSamples = emptyList()
+                        dailyTotals = emptyList()
+                        doseBreakdown = emptyMap()
                     }) {
                         Icon(Icons.Default.Delete, contentDescription = "Clear History")
                     }
@@ -141,13 +186,23 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                             Column(Modifier.padding(12.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = "${event.timeString} (${event.durationSeconds.toInt()}s)",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.secondary
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (event.isDay) Icons.Default.WbSunny else Icons.Default.NightsStay,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = if (event.isDay) Color(0xFFFFB300) else Color(0xFF9FA8DA)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "${event.timeString} (${event.durationSeconds.toInt()}s)",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
                                     Text(
                                         text = "${event.db.toInt()} dB",
                                         style = MaterialTheme.typography.titleMedium,
@@ -224,27 +279,103 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                                             Spacer(Modifier.weight(1f))
                                             IconButton(
                                                 onClick = {
-                                                    exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(java.io.File(event.audioPath))))
-                                                    exoPlayer.prepare()
-                                                    exoPlayer.play()
+                                                    if (playingAudioPath == event.audioPath) {
+                                                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                                    } else {
+                                                        playingAudioPath = event.audioPath
+                                                        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(java.io.File(event.audioPath))))
+                                                        exoPlayer.prepare()
+                                                        exoPlayer.play()
+                                                    }
                                                 },
                                                 modifier = Modifier.size(32.dp)
                                             ) {
-                                                Icon(Icons.Default.PlayArrow, contentDescription = "Play Audio")
+                                                Icon(
+                                                    imageVector = if (playingAudioPath == event.audioPath && isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                    contentDescription = if (isPlaying) "Pause Audio" else "Play Audio"
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (playingAudioPath == event.audioPath && event.audioPath != null) {
+                                        Column(modifier = Modifier.padding(top = 8.dp)) {
+                                            Slider(
+                                                value = currentPosition.toFloat(),
+                                                onValueChange = { 
+                                                    currentPosition = it.toLong()
+                                                    exoPlayer.seekTo(it.toLong())
+                                                },
+                                                valueRange = 0f..(totalDuration.toFloat().coerceAtLeast(1f)),
+                                                modifier = Modifier.fillMaxWidth().height(24.dp)
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = formatDuration(currentPosition),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                                Text(
+                                                    text = formatDuration(totalDuration),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
                                             }
                                         }
                                     }
                                 } else if (event.audioPath != null) {
                                     Spacer(Modifier.height(8.dp))
-                                    IconButton(
-                                        onClick = {
-                                            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(java.io.File(event.audioPath))))
-                                            exoPlayer.prepare()
-                                            exoPlayer.play()
-                                        },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(Icons.Default.PlayArrow, contentDescription = "Play Audio")
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = {
+                                                if (playingAudioPath == event.audioPath) {
+                                                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                                } else {
+                                                    playingAudioPath = event.audioPath
+                                                    exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(java.io.File(event.audioPath))))
+                                                    exoPlayer.prepare()
+                                                    exoPlayer.play()
+                                                }
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (playingAudioPath == event.audioPath && isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = if (isPlaying) "Pause Audio" else "Play Audio"
+                                            )
+                                        }
+
+                                        if (playingAudioPath == event.audioPath) {
+                                            Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                                                Slider(
+                                                    value = currentPosition.toFloat(),
+                                                    onValueChange = { 
+                                                        currentPosition = it.toLong()
+                                                        exoPlayer.seekTo(it.toLong())
+                                                    },
+                                                    valueRange = 0f..(totalDuration.toFloat().coerceAtLeast(1f)),
+                                                    modifier = Modifier.fillMaxWidth().height(24.dp)
+                                                )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text(
+                                                        text = formatDuration(currentPosition),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
+                                                    Text(
+                                                        text = formatDuration(totalDuration),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -354,11 +485,28 @@ fun TrendChart(title: String, totals: List<DailyTotal>, days: Int) {
         Column(Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxSize()) {
-                Canvas(modifier = Modifier.fillMaxSize().padding(bottom = 20.dp)) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val chartWidth = maxWidth - 50.dp
+                val chartHeight = maxHeight - 20.dp
+
+                Canvas(modifier = Modifier
+                    .width(chartWidth)
+                    .height(chartHeight)) {
                     val width = size.width
                     val height = size.height
                     val maxDose = (displayTotals.maxOfOrNull { it.dose } ?: 1f).coerceAtLeast(1f)
+
+                    // Draw 100% limit line
+                    val limitY = height - (1.0f / maxDose) * height
+                    if (limitY in 0f..height) {
+                        drawLine(
+                            color = Color.Red.copy(alpha = 0.5f),
+                            start = Offset(0f, limitY),
+                            end = Offset(width, limitY),
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f),
+                            strokeWidth = 1.dp.toPx()
+                        )
+                    }
 
                     if (displayTotals.isNotEmpty()) {
                         val barWidth = width / days
@@ -375,9 +523,25 @@ fun TrendChart(title: String, totals: List<DailyTotal>, days: Int) {
                     }
                 }
 
+                // Limit Label
+                val maxDose = (displayTotals.maxOfOrNull { it.dose } ?: 1f).coerceAtLeast(1f)
+                val limitYPercent = 1.0f / maxDose
+                if (limitYPercent <= 1.0f) {
+                    Text(
+                        "100% Limit",
+                        color = Color.Red.copy(alpha = 0.7f),
+                        fontSize = 9.sp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(y = chartHeight * (1f - limitYPercent) - 6.dp)
+                    )
+                }
+
                 // Labels
                 Row(
-                    modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+                    modifier = Modifier
+                        .width(chartWidth)
+                        .align(Alignment.BottomStart),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     val validTotals = displayTotals.filter { it.dateString.isNotEmpty() }
@@ -405,15 +569,45 @@ fun DoseChart(samples: List<DoseSample>) {
         Column(Modifier.padding(16.dp)) {
             Text("Daily Dose Progression (%)", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxSize()) {
-                Canvas(modifier = Modifier.fillMaxSize().padding(bottom = 20.dp)) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val chartWidth = maxWidth - 40.dp
+                val chartHeight = maxHeight - 24.dp
+
+                Canvas(modifier = Modifier
+                    .width(chartWidth)
+                    .height(chartHeight)) {
                     val width = size.width
                     val height = size.height
                     val maxDose = (samples.maxOfOrNull { it.dose } ?: 1f).coerceAtLeast(1f)
 
-                    // Draw grid lines
-                    drawLine(labelColor.copy(0.2f), Offset(0f, 0f), Offset(width, 0f))
-                    drawLine(labelColor.copy(0.2f), Offset(0f, height), Offset(width, height))
+                    // Draw horizontal grid lines
+                    val levels = listOf(0.25f, 0.5f, 0.75f, 1.0f)
+                    levels.forEach { level ->
+                        val y = height - (level / maxDose) * height
+                        if (y in 0f..height) {
+                            drawLine(
+                                color = labelColor.copy(alpha = 0.2f),
+                                start = Offset(0f, y),
+                                end = Offset(width, y),
+                                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        }
+                    }
+
+                    // Draw vertical notches
+                    if (samples.size > 1) {
+                        val notchCount = 4
+                        for (i in 0..notchCount) {
+                            val x = (i.toFloat() / notchCount) * width
+                            drawLine(
+                                color = labelColor.copy(alpha = 0.1f),
+                                start = Offset(x, 0f),
+                                end = Offset(x, height),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        }
+                    }
 
                     if (samples.size > 1) {
                         val path = Path()
@@ -438,20 +632,47 @@ fun DoseChart(samples: List<DoseSample>) {
                     }
                 }
 
+                // Y-axis Labels (Right side)
+                val maxDose = (samples.maxOfOrNull { it.dose } ?: 1f).coerceAtLeast(1f)
+                val levels = listOf(0.25f, 0.5f, 0.75f, 1.0f)
+                levels.forEach { level ->
+                    val yPercent = level / maxDose
+                    if (yPercent <= 1.0f) {
+                        Text(
+                            text = "${(level * 100).toInt()}%",
+                            fontSize = 9.sp,
+                            color = labelColor.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(y = chartHeight * (1f - yPercent) - 6.dp)
+                        )
+                    }
+                }
+
                 // Time labels (X-axis)
                 Row(
-                    modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+                    modifier = Modifier
+                        .width(chartWidth)
+                        .align(Alignment.BottomStart)
+                        .padding(top = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     if (samples.isNotEmpty()) {
-                        Text(samples.first().timeString, fontSize = 10.sp, color = labelColor)
+                        Text(samples.first().timeString, fontSize = 9.sp, color = labelColor)
                         if (samples.size > 2) {
-                            Text(samples[samples.size / 2].timeString, fontSize = 10.sp, color = labelColor)
+                            Text(samples[samples.size / 2].timeString, fontSize = 9.sp, color = labelColor)
                         }
-                        Text(samples.last().timeString, fontSize = 10.sp, color = labelColor)
+                        Text(samples.last().timeString, fontSize = 9.sp, color = labelColor)
                     }
                 }
             }
         }
     }
+}
+
+private fun formatDuration(millis: Long): String {
+    val totalSeconds = millis / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%02d:%02d".format(minutes, seconds)
 }

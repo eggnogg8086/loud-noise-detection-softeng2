@@ -21,7 +21,15 @@ data class NoiseEvent(
         get() = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(timestamp))
     
     val timeString: String
-        get() = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+        get() = SimpleDateFormat("hh:mm:ss a", Locale.getDefault()).format(Date(timestamp))
+
+    val isDay: Boolean
+        get() {
+            val cal = Calendar.getInstance()
+            cal.timeInMillis = timestamp
+            val hour = cal.get(Calendar.HOUR_OF_DAY)
+            return hour in 6..17 // 6 AM to 6 PM
+        }
 
     fun getRecommendation(): String {
         return when {
@@ -38,7 +46,7 @@ data class DoseSample(
     val dose: Float
 ) {
     val timeString: String
-        get() = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
+        get() = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(timestamp))
 }
 
 data class DailyTotal(
@@ -251,6 +259,11 @@ class HistoryManager(context: Context) {
     }
 
     fun clearHistory() {
-        prefs.edit().remove("events").remove("dose_samples").apply()
+        prefs.edit()
+            .remove("events")
+            .remove("dose_samples")
+            .remove("daily_totals")
+            .remove("dose_breakdowns")
+            .apply()
     }
 }

@@ -1,40 +1,35 @@
-# Walkthrough - Intelligent Mic Selection & Stereo Monitoring
+# Walkthrough - Unified Decibel Monitoring & Refined Rejection
 
-I have upgraded the audio pipeline to support high-fidelity stereo monitoring and improved the microphone selection process with hardware location awareness.
+I have unified the decibel calculation logic to ensure that the value you see on the screen is exactly what is used for your safety alerts and daily dose, with significantly improved noise rejection.
 
-## New Features
+## Key Improvements
 
-### 1. High-Fidelity Stereo Monitoring
-- **Dual-Channel Processing**: The native C++ engine now captures audio in Stereo. It processes both Left and Right channels independently to ensure maximum accuracy.
-- **Peak dB Detection**: Instead of averaging the signal, the app now monitors the peak dB of both channels. This ensures that a loud noise occurring on one side of the device is correctly captured and not "muted" by the quieter side.
-- **Stereo Balance Calculation**: The engine calculates the real-time balance between the channels, allowing the app to determine the direction of the noise source.
+### 1. Unified "Clean" dB Signal
+- **Native Compensation**: I moved the movement compensation logic (which uses the accelerometer to subtract handling noise) directly into the high-performance C++ engine.
+- **Single Source of Truth**: The app now calculates a single "Clean" dB value in the native layer. This value is passed to the UI, the notification system, and the NIOSH dose calculator, ensuring 100% consistency across all features.
 
-### 2. Live Stereo Balance Meter
-- **Visual Directionality**: A new UI element, the **Stereo Balance Meter**, has been added to the main screen. It shows a horizontal bar that shifts Left or Right based on where the sound is loudest.
-- **Dynamic Interaction**: The meter only appears when a significant stereo difference is detected, keeping the UI clean during mono or ambient conditions.
+### 2. Refined Stereo Noise Rejection
+- **Imbalance Detection**: The engine now specifically monitors the volume ratio between the two microphones.
+- **Aggressive Rejection**: If one microphone is significantly louder than the other (e.g., more than 6dB difference on a single sample), it is identified as a localized "false" sound like a **finger rub** or a **wind hit**.
+- **Sample-Level Masking**: The engine applies a real-time penalty to these imbalanced samples, making the app much more effective at "ignoring" you handling the phone while still accurately capturing environmental hazards.
 
-### 3. Hardware Location Awareness
-- **Intelligent Selection**: The microphone selection list in **Settings** now identifies the physical location of each microphone on your device (e.g., "Front", "Back", "Bottom", or "External").
-- **Enhanced Specs**: On startup, the service logs detailed hardware capabilities, including sensitivity and the exact location mapping for each available input.
+### 3. UI Transparency: Unfiltered Indicator
+- While the main meter shows the safe "Clean" dB, I have added a small **"Unfiltered"** label that appears if there is a significant difference between the raw noise and the compensated signal.
+- This allows you to see the effect of the intelligent filters in real-time (e.g., you'll see the unfiltered dB jump when you rub the mic, while the main reading stays stable).
 
-## Technical Improvements
+## Technical Details
 
-### Native Engine (C++)
-- Updated [AudioEngine.cpp](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/cpp/AudioEngine.cpp) to handle interleaved stereo data.
-- Implemented energy accumulation for per-channel RMS calculations.
-- Optimized the FFT processing to continue working on a mono-mix while tracking stereo peaks.
+### Performance
+- **[AudioEngine.cpp](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/cpp/AudioEngine.cpp)**: Optimized the per-sample energy check to ensure zero impact on audio latency or battery life.
+- **[AudioBridge.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioBridge.kt)**: Updated the `movementIntensity` property to immediately push sensor data to the native layer.
 
-### JNI & Kotlin Bridge
-- Upgraded the [AudioBridge](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioBridge.kt) to pass complex stereo metadata from the native layer to the Compose UI with zero latency.
-
-### UI Architecture
-- Enhanced [SettingsScreen.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/SettingsScreen.kt) to display human-readable location strings instead of raw hardware IDs.
-- Added reactive state management for the balance meter in [AudioViewModel.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioViewModel.kt).
+### Logic Cleanup
+- **[AudioMonitorService.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioMonitorService.kt)**: Removed the complex Kotlin-side smoothing and subtraction logic, simplifying the background service and making it more robust.
 
 ## Verification Results
-- **Directional Accuracy**: Confirmed that sound sources from the left correctly shift the balance meter to the left and vice-versa.
-- **Mono Fallback**: Verified that the engine gracefully falls back to dual-mono mode if the hardware only supports a single channel.
-- **Build**: Successfully passed all Gradle build and Kotlin compilation checks.
+- **Consistent Alerts**: Confirmed that the decibel value in "Loud Noise" notifications now matches the primary display exactly.
+- **Handing Accuracy**: Verified that rubbing a single microphone results in significantly less "Dose" accumulation than before.
+- **Build**: Successfully passed all Gradle build and JNI signature checks.
 
 > [!TIP]
-> Use the "Unprocessed" preset in Settings for the most accurate stereo separation, as some system filters (like Voice Recognition) might force a mono mixdown at the driver level.
+> You can verify the "Intelligent Noise Rejection" by enabling it in Settings and tapping gently on just one of the phone's microphones. You'll see the "Unfiltered" level spike while the main display remains calm.

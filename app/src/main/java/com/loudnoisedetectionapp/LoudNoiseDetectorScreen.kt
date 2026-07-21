@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.PermissionChecker
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 
@@ -30,13 +31,16 @@ fun LoudNoiseDetectorScreen(
     modifier: Modifier = Modifier,
     audioViewModel: AudioViewModel = viewModel()
 ) {
-    var hasPermission by remember { mutableStateOf(false) }
-    var showBatteryPrompt by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var hasPermission by remember { 
+        mutableStateOf(
+            PermissionChecker.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PermissionChecker.PERMISSION_GRANTED
+        ) 
+    }
     var showDoseInfo by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
-
-    val context = LocalContext.current
+    var showCalibration by remember { mutableStateOf(false) }
 
     if (showSettings) {
         BackHandler {
@@ -44,6 +48,25 @@ fun LoudNoiseDetectorScreen(
         }
         SettingsScreen(
             onBack = { showSettings = false },
+            audioViewModel = audioViewModel,
+            onNavigateToCalibration = {
+                showSettings = false
+                showCalibration = true
+            }
+        )
+        return
+    }
+
+    if (showCalibration) {
+        BackHandler {
+            showCalibration = false
+            showSettings = true
+        }
+        CalibrationScreen(
+            onBack = {
+                showCalibration = false
+                showSettings = true
+            },
             audioViewModel = audioViewModel
         )
         return
@@ -61,35 +84,6 @@ fun LoudNoiseDetectorScreen(
         audioViewModel.initCalibration(context)
     }
 
-    val checkBatteryOptimization = {
-        val pm = context.getSystemService(PowerManager::class.java)
-        if (!pm.isIgnoringBatteryOptimizations(context.packageName)) {
-            showBatteryPrompt = true
-        }
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val audioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
-        val locGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val notificationGranted = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            permissions[Manifest.permission.POST_NOTIFICATIONS] ?: false
-        } else {
-            true
-        }
-
-        hasPermission = audioGranted
-
-        if (audioGranted) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, AudioMonitorService::class.java)
-            )
-            checkBatteryOptimization()
-        }
-    }
-
     val currentDb = audioViewModel.currentDb
 
     val noiseDescription = remember(currentDb) {
@@ -103,18 +97,6 @@ fun LoudNoiseDetectorScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        val permissions = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        permissionLauncher.launch(permissions.toTypedArray())
-    }
-
     DisposableEffect(Unit) {
         onDispose { 
             // We do not stop the recording here because the Service 
@@ -125,7 +107,7 @@ fun LoudNoiseDetectorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Noise Monitor") },
+                title = { Text("Loud Noise Detection") },
                 actions = {
                     TextButton(onClick = { showHistory = true }) {
                         Text("History")
@@ -139,28 +121,6 @@ fun LoudNoiseDetectorScreen(
     ) { innerPadding ->
         if (showDoseInfo) {
             DoseInfoDialog(onDismiss = { showDoseInfo = false })
-        }
-        
-        if (showBatteryPrompt) {
-            AlertDialog(
-                onDismissRequest = { showBatteryPrompt = false },
-                title = { Text("Disable Battery Optimization") },
-                text = { Text("To ensure reliable background monitoring, please set battery usage to 'Unrestricted' for this app.") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showBatteryPrompt = false
-                        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                        context.startActivity(intent)
-                    }) {
-                        Text("Open Settings")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showBatteryPrompt = false }) {
-                        Text("Cancel")
-                    }
-                }
-            )
         }
 
         Column(
@@ -183,17 +143,41 @@ fun LoudNoiseDetectorScreen(
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
+                    
+                    if (Math.abs(audioViewModel.currentDb - audioViewModel.rawDb) > 1.0f) {
+                        Text(
+                            text = "Unfiltered: ${audioViewModel.rawDb.toInt()} dB",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    } else {
+                        Spacer(Modifier.height(16.dp))
+                    }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        VUMeter(
-                            db = audioViewModel.currentDb,
-                            maxDb = maxOf(100f, audioViewModel.maxDb),
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 8.dp)
-                        )
+                        if (audioViewModel.actualChannelCount > 1 || audioViewModel.isStereoSupported) {
+                            StereoVUMeter(
+                                leftDb = audioViewModel.leftDb,
+                                rightDb = audioViewModel.rightDb,
+                                isRejectionActive = audioViewModel.isRejectionActive,
+                                maxDb = maxOf(100f, audioViewModel.maxDb),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 16.dp)
+                            )
+                        } else {
+                            VUMeter(
+                                db = audioViewModel.currentDb,
+                                maxDb = maxOf(100f, audioViewModel.maxDb),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 8.dp)
+                            )
+                        }
+                        
                         if (audioViewModel.isSelfNoiseActive) {
                             Icon(
                                 Icons.Default.MusicNote,
@@ -202,15 +186,6 @@ fun LoudNoiseDetectorScreen(
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-                    }
-
-                    if (audioViewModel.stereoBalance != 0f) {
-                        StereoBalanceMeter(
-                            balance = audioViewModel.stereoBalance,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 32.dp, vertical = 8.dp)
-                        )
                     }
 
                     Spacer(Modifier.height(24.dp))
@@ -252,35 +227,6 @@ fun LoudNoiseDetectorScreen(
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             }
-        }
-    }
-}
-
-@Composable
-fun StereoBalanceMeter(balance: Float, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("L", style = MaterialTheme.typography.labelSmall)
-            Text("Balance", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-            Text("R", style = MaterialTheme.typography.labelSmall)
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(4.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.extraSmall)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.1f)
-                    .align(if (balance < 0) Alignment.CenterStart else Alignment.CenterEnd)
-                    .offset(x = (balance * 50).dp) // Visualization simplification
-                    .background(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.extraSmall)
-            )
         }
     }
 }

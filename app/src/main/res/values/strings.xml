@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Loud Noise Detection App</string>
+    <string name="app_name">Loud Noise Detection</string>
     <string name="loud_noise_detector_title">Loud Noise Detector</string>
     <string name="view_noise_level">View noise level</string>
     <string name="view_noise_level_over_time">View noise level over time</string>

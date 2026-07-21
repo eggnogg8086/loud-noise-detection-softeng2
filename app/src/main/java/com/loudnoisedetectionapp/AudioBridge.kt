@@ -6,18 +6,21 @@ object AudioBridge {
     @Volatile
     var currentDose = 0f
     
-    @Volatile
     var movementIntensity = 0f
+        set(value) {
+            field = value
+            nativeSetMovementIntensity(value)
+        }
 
     @Volatile
     var isSelfNoiseActive = false
 
+    const val FFT_SIZE = 8192
+    const val SAMPLE_RATE = 44100
+    const val BUFFER_DURATION = FFT_SIZE.toDouble() / SAMPLE_RATE
+
     init {
         System.loadLibrary("noisecapture")
-    }
-
-    fun interface SpectrumCallback {
-        fun onSpectrum(spectrum: FloatArray, db: Float, balance: Float)
     }
 
     private val callbacks = Collections.synchronizedSet(mutableSetOf<SpectrumCallback>())
@@ -30,20 +33,50 @@ object AudioBridge {
         sensitivity: Float,
         freqs: FloatArray?,
         gains: FloatArray?,
-        useAWeighting: Boolean
+        useAWeighting: Boolean,
+        useNoiseRejection: Boolean,
+        calibrationOffset: Float,
+        integrationTime: Int
     ): Boolean
     private external fun nativeStop()
     private external fun nativeDestroy()
     private external fun nativeGetSessionId(): Int
     private external fun nativeStartRecording()
+    private external fun nativeSetMovementIntensity(intensity: Float)
     private external fun nativeGetSnippet(path: String): Boolean
 
-    private val internalCallback = SpectrumCallback { spectrum, db, balance ->
-        val currentCallbacks = synchronized(callbacks) {
-            callbacks.toList()
+    private class BridgeCallback : SpectrumCallback {
+        override fun onSpectrum(
+            spectrum: FloatArray,
+            db: Float,
+            dbRaw: Float,
+            dbAlert: Float,
+            dbL: Float,
+            dbR: Float,
+            balance: Float,
+            rejectionActive: Boolean,
+            channelCount: Int
+        ) {
+            val currentCallbacks = synchronized(callbacks) {
+                callbacks.toList()
+            }
+            currentCallbacks.forEach {
+                it.onSpectrum(
+                    spectrum,
+                    db,
+                    dbRaw,
+                    dbAlert,
+                    dbL,
+                    dbR,
+                    balance,
+                    rejectionActive,
+                    channelCount
+                )
+            }
         }
-        currentCallbacks.forEach { it.onSpectrum(spectrum, db, balance) }
     }
+
+    private val internalCallback = BridgeCallback()
 
     fun addCallback(callback: SpectrumCallback) {
         callbacks.add(callback)
@@ -63,8 +96,21 @@ object AudioBridge {
         sensitivity: Float = -999f,
         freqs: FloatArray? = null,
         gains: FloatArray? = null,
-        useAWeighting: Boolean = true
-    ) = nativeStart(deviceId, inputPreset, sensitivity, freqs, gains, useAWeighting)
+        useAWeighting: Boolean = true,
+        useNoiseRejection: Boolean = true,
+        calibrationOffset: Float = 0f,
+        integrationTime: Int = 0
+    ) = nativeStart(
+        deviceId,
+        inputPreset,
+        sensitivity,
+        freqs,
+        gains,
+        useAWeighting,
+        useNoiseRejection,
+        calibrationOffset,
+        integrationTime
+    )
 
     fun startRecording() = nativeStartRecording()
     fun saveSnippet(path: String) = nativeGetSnippet(path)

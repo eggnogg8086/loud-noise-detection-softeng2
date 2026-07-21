@@ -53,10 +53,11 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.glance)
     implementation(platform(libs.androidx.compose.bom))
     implementation("com.google.android.gms:play-services-location:21.3.0")
-    implementation("androidx.glance:glance-appwidget:1.1.1")
-    implementation("androidx.glance:glance-material3:1.1.1")
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
     implementation(libs.media3.exoplayer)
     implementation(libs.androidx.media3.session)
     dependencies {

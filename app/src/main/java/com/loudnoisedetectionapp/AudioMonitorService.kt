@@ -63,8 +63,6 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
     
     @Volatile
     private var currentMovementIntensity = 0f
-    private var smoothedMovementIntensity = 0f
-    private val SMOOTHING_FACTOR = 0.15f
 
     // Grouping logic state
     private var isLoudEpisodeActive = false
@@ -87,6 +85,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
     private val WIDGET_UPDATE_INTERVAL_MS = 2000L
 
     private var echoCanceler: AcousticEchoCanceler? = null
+    private var automaticGainControl: android.media.audiofx.AutomaticGainControl? = null
     private var isSelfNoiseActive = false
 
     private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
@@ -210,28 +209,37 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         startMonitoring()
     }
 
-    private val serviceCallback = AudioBridge.SpectrumCallback { spectrum, db, balance ->
-        val now = System.currentTimeMillis()
+    private val serviceCallback = object : SpectrumCallback {
+        override fun onSpectrum(
+            spectrum: FloatArray,
+            db: Float,
+            dbRaw: Float,
+            dbAlert: Float,
+            dbL: Float,
+            dbR: Float,
+            balance: Float,
+            rejectionActive: Boolean,
+            channelCount: Int
+        ) {
+            val now = System.currentTimeMillis()
 
-        // Movement-based noise compensation
-        smoothedMovementIntensity = smoothedMovementIntensity * (1f - SMOOTHING_FACTOR) + currentMovementIntensity * SMOOTHING_FACTOR
-        val movementCompensation = (smoothedMovementIntensity * 2.5f).coerceAtMost(25.0f)
-        val compensatedDb = db - movementCompensation
+        // Movement-based noise compensation is now handled in the native engine.
+        // We directly use the 'db' value received here.
 
-        if (lastCallbackTime != 0L) {
-            val deltaTimeSeconds = (now - lastCallbackTime) / 1000f
-            exposureManager?.addExposure(compensatedDb, deltaTimeSeconds)
-            if (exposureManager?.shouldNotify() == true) {
-                sendExposureNotification(exposureManager?.getCurrentDose() ?: 0f)
-                exposureManager?.markNotified()
-            }
+        // Fix: Use exact buffer duration for dose calculation to avoid timing drift
+        val deltaTimeSeconds = AudioBridge.BUFFER_DURATION.toFloat()
+        exposureManager?.addExposure(db, deltaTimeSeconds)
+        
+        if (exposureManager?.shouldNotify() == true) {
+            sendExposureNotification(exposureManager?.getCurrentDose() ?: 0f)
+            exposureManager?.markNotified()
         }
         lastCallbackTime = now
 
         // Widget Update
         if (now - lastWidgetUpdateTime > WIDGET_UPDATE_INTERVAL_MS) {
             val dose = exposureManager?.getCurrentDose() ?: 0f
-            updateWidget(compensatedDb, dose)
+            updateWidget(db, dose)
             lastWidgetUpdateTime = now
         }
 
@@ -243,12 +251,13 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
 
         val threshold = settingsManager?.thresholdDb ?: 82f
 
-        if (compensatedDb > threshold) {
+        // Fix: Use dbAlert (responsive peak) for threshold checks
+        if (dbAlert > threshold) {
             lastLoudTime = now
             if (!isLoudEpisodeActive) {
                 isLoudEpisodeActive = true
                 episodeStartTime = now
-                episodeMaxDb = compensatedDb
+                episodeMaxDb = dbAlert
                 val freqs = findTopFrequencies(spectrum)
                 episodeF1Sum = freqs.first
                 episodeF2Sum = freqs.second
@@ -270,7 +279,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
                     Log.w("AudioMonitorService", "Location permission not granted for tagging")
                 }
             } else {
-                episodeMaxDb = maxOf(episodeMaxDb, compensatedDb)
+                episodeMaxDb = maxOf(episodeMaxDb, dbAlert)
                 val freqs = findTopFrequencies(spectrum)
                 episodeF1Sum += freqs.first
                 episodeF2Sum += freqs.second
@@ -308,6 +317,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
                 episodeLon = null
                 wasSelfNoiseInEpisode = false
             }
+        }
         }
     }
 
@@ -349,6 +359,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         sensorManager.unregisterListener(this)
         audioManager.abandonAudioFocus(this)
         releaseEchoCanceler()
+        releaseAutomaticGainControl()
         exposureManager?.persist()
         AudioBridge.removeCallback(serviceCallback)
         AudioBridge.stop()
@@ -422,10 +433,34 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         }
     }
 
+    private fun manageAutomaticGainControl() {
+        val sessionId = AudioBridge.getSessionId()
+        if (sessionId > 0) {
+            if (android.media.audiofx.AutomaticGainControl.isAvailable()) {
+                releaseAutomaticGainControl()
+                try {
+                    automaticGainControl = android.media.audiofx.AutomaticGainControl.create(sessionId)
+                    automaticGainControl?.enabled = false // Explicitly disable AGC
+                    Log.d("AudioMonitorService", "AutomaticGainControl DISABLED on session $sessionId")
+                } catch (e: Exception) {
+                    Log.e("AudioMonitorService", "Failed to manage AutomaticGainControl", e)
+                }
+            } else {
+                Log.d("AudioMonitorService", "AutomaticGainControl is not available on this device")
+            }
+        }
+    }
+
     private fun releaseEchoCanceler() {
         echoCanceler?.enabled = false
         echoCanceler?.release()
         echoCanceler = null
+    }
+
+    private fun releaseAutomaticGainControl() {
+        automaticGainControl?.enabled = false
+        automaticGainControl?.release()
+        automaticGainControl = null
     }
 
     private fun startMonitoring() {
@@ -443,10 +478,14 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         val preset = settingsManager?.audioPreset ?: 9
         val (sensitivity, freqs, gains) = fetchMicrophoneInfo(deviceId)
         val useAWeighting = settingsManager?.useAWeighting ?: true
+        val useNoiseRejection = settingsManager?.intelligentNoiseRejection ?: true
+        val calibrationOffset = settingsManager?.calibrationOffset ?: 0f
+        val integrationTime = settingsManager?.integrationTime ?: 0
 
         AudioBridge.addCallback(serviceCallback)
-        if (AudioBridge.start(deviceId, preset, sensitivity, freqs, gains, useAWeighting)) {
+        if (AudioBridge.start(deviceId, preset, sensitivity, freqs, gains, useAWeighting, useNoiseRejection, calibrationOffset, integrationTime)) {
             manageAcousticEchoCanceler()
+            manageAutomaticGainControl()
         }
     }
 

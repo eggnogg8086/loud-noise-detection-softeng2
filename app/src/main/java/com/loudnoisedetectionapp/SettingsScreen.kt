@@ -1,10 +1,13 @@
 package com.loudnoisedetectionapp
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MicrophoneInfo
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,12 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.PermissionChecker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    audioViewModel: AudioViewModel
+    audioViewModel: AudioViewModel,
+    onNavigateToCalibration: () -> Unit
 ) {
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager(context) }
@@ -36,6 +41,20 @@ fun SettingsScreen(
     var nioshRatio by remember { mutableStateOf(settingsManager.nioshRatio) }
     var useAWeighting by remember { mutableStateOf(settingsManager.useAWeighting) }
     var speakerCompensation by remember { mutableStateOf(settingsManager.speakerCompensationEnabled) }
+    var noiseRejection by remember { mutableStateOf(settingsManager.intelligentNoiseRejection) }
+    var integrationTime by remember { mutableStateOf(settingsManager.integrationTime) }
+    
+    var locationEnabled by remember { 
+        mutableStateOf(
+            PermissionChecker.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PermissionChecker.PERMISSION_GRANTED
+        ) 
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        locationEnabled = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+    }
 
     val presets = listOf(
         "Unprocessed" to 9,
@@ -64,11 +83,88 @@ fun SettingsScreen(
         ) {
             item {
                 Text("Calibration", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = onNavigateToCalibration,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Manual Calibration (Offset)")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = { audioViewModel.resetCalibration() },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                 ) {
-                    Text("Reset Calibration Max")
+                    Text("Reset Session Max dB")
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
+
+            item {
+                Text("Integration Time", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Affects how quickly the meter reacts to noise.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = integrationTime == SettingsManager.INTEGRATION_FAST,
+                        onClick = {
+                            integrationTime = SettingsManager.INTEGRATION_FAST
+                            settingsManager.integrationTime = SettingsManager.INTEGRATION_FAST
+                            notifyService(context)
+                        },
+                        label = { Text("Fast (125ms)") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = integrationTime == SettingsManager.INTEGRATION_SLOW,
+                        onClick = {
+                            integrationTime = SettingsManager.INTEGRATION_SLOW
+                            settingsManager.integrationTime = SettingsManager.INTEGRATION_SLOW
+                            notifyService(context)
+                        },
+                        label = { Text("Slow (1s)") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
+
+            item {
+                Text("Features", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Noise Mapping (GPS)")
+                        Text(
+                            "Tag loud noise events with your location for history analysis.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = locationEnabled,
+                        onCheckedChange = {
+                            if (it) {
+                                permissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            } else {
+                                // We can't really "revoke" permission, but we can stop using it logic-wise if needed.
+                                // For now, the system handles the actual permission state.
+                                locationEnabled = false
+                            }
+                        }
+                    )
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }
@@ -150,6 +246,29 @@ fun SettingsScreen(
                         onCheckedChange = {
                             speakerCompensation = it
                             settingsManager.speakerCompensationEnabled = it
+                            notifyService(context)
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Intelligent Noise Rejection")
+                        Text(
+                            "Uses stereo microphones to cancel out wind and handling noise.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = noiseRejection,
+                        onCheckedChange = {
+                            noiseRejection = it
+                            settingsManager.intelligentNoiseRejection = it
                             notifyService(context)
                         }
                     )

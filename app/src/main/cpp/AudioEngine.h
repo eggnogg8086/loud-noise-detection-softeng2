@@ -11,16 +11,18 @@ public:
     static constexpr int kFftSize      = 8192;
     static constexpr int kSpectrumSize = kFftSize / 2;
 
-    using SpectrumCallback = std::function<void(const float*, int, float, float)>;
+    using SpectrumCallback = std::function<void(const float*, int, float, float, float, float, float, float, bool, int)>;
 
     explicit AudioEngine(SpectrumCallback cb);
     ~AudioEngine();
 
     bool start(int deviceId = -1, int inputPreset = 9, float sensitivity = -999.0f,
                const std::vector<float>& freqs = {}, const std::vector<float>& gains = {},
-               bool useAWeighting = true);
+               bool useAWeighting = true, bool useNoiseRejection = true,
+               float calibrationOffset = 0.0f, int integrationTime = 0);
     void stop();
     int getSessionId() const;
+    void setMovementIntensity(float intensity);
 
     oboe::DataCallbackResult onAudioReady(
             oboe::AudioStream* stream,
@@ -43,12 +45,21 @@ private:
     std::vector<float> mFreqCompensation;
     std::vector<float> mAWeighting;
     bool mUseAWeighting = true;
+    bool mUseNoiseRejection = true;
+    bool mRejectionActive = false;
     float mSensitivity = -999.0f;
+    float mMovementIntensity = 0.0f;
+    float mCalibrationOffset = 0.0f;
+    int mIntegrationTime = 0;
     int mBufferPos = 0;
 
     float mLeftSumSq = 0;
     float mRightSumSq = 0;
     int mEnergyCount = 0;
+
+    // Smoothed values for Fast/Slow integration
+    float mSmoothedDb = 0.0f;
+    bool mIsFirstBuffer = true;
 
     // Circular buffer for snippets (last 5 seconds)
     static constexpr int kCircularBufferSize = kSampleRate * 5;

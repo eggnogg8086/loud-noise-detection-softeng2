@@ -1,0 +1,5 @@
+- `[ ]` Create top-level `SpectrumCallback.kt` interface
+- `[ ]` Update `AudioBridge.kt` to remove nested interface and use named callback class
+- `[ ]` Update `AudioBridge.cpp` with new JNI class path
+- `[ ]` Update `AudioMonitorService.kt`, `AudioViewModel.kt`, and `MicDiscoveryViewModel.kt`
+- `[ ]` Verify build and functionality

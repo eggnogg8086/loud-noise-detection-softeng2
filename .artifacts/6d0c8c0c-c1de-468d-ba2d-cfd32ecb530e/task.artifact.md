@@ -1,0 +1,6 @@
+- `[x]` Update `SpectrumCallback.kt` with `dbAlert`
+- `[x]` Update `AudioBridge.kt` & `AudioBridge.cpp` JNI signature
+- `[x]` Update `AudioEngine` (Native) to calculate `dbAlert`
+- `[x]` Update `AudioMonitorService.kt` to use `dbAlert` and fixed timing
+- `[x]` Update `AudioViewModel.kt` and `MicDiscoveryViewModel.kt` to match signature
+- `[x]` Verify responsive alerts in "Slow" mode

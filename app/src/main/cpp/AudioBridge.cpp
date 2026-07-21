@@ -1,7 +1,11 @@
 #include <jni.h>
 #include <memory>
 #include <fstream>
+#include <android/log.h>
 #include "AudioEngine.h"
+
+#define LOG_TAG "AudioBridge"
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 static std::unique_ptr<AudioEngine> gEngine;
 static JavaVM* gJvm = nullptr;
@@ -16,10 +20,20 @@ Java_com_loudnoisedetectionapp_AudioBridge_nativeInit(
 {
 env->GetJavaVM(&gJvm);
 gCallback = env->NewGlobalRef(callback);
-jclass clazz = env->GetObjectClass(callback);
-gOnSpectrumMethod = env->GetMethodID(clazz, "onSpectrum", "([FFF)V");
 
-gEngine = std::make_unique<AudioEngine>([](const float* data, int size, float db, float balance) {
+jclass clazz = env->FindClass("com/loudnoisedetectionapp/SpectrumCallback");
+if (clazz == nullptr) {
+    LOGE("Failed to find SpectrumCallback interface");
+    return;
+}
+
+gOnSpectrumMethod = env->GetMethodID(clazz, "onSpectrum", "([FFFFFFFZI)V");
+if (gOnSpectrumMethod == nullptr) {
+    LOGE("Failed to find onSpectrum method");
+    return;
+}
+
+gEngine = std::make_unique<AudioEngine>([](const float* data, int size, float db, float dbRaw, float dbAlert, float dbL, float dbR, float balance, bool rejectionActive, int channelCount) {
     JNIEnv* env2;
     bool attached = false;
     if (gJvm->GetEnv((void**)&env2, JNI_VERSION_1_6) != JNI_OK) {
@@ -28,7 +42,7 @@ gEngine = std::make_unique<AudioEngine>([](const float* data, int size, float db
     }
     jfloatArray arr = env2->NewFloatArray(size);
     env2->SetFloatArrayRegion(arr, 0, size, data);
-    env2->CallVoidMethod(gCallback, gOnSpectrumMethod, arr, (jfloat)db, (jfloat)balance);
+    env2->CallVoidMethod(gCallback, gOnSpectrumMethod, arr, (jfloat)db, (jfloat)dbRaw, (jfloat)dbAlert, (jfloat)dbL, (jfloat)dbR, (jfloat)balance, (jboolean)rejectionActive, (jint)channelCount);
     env2->DeleteLocalRef(arr);
     if (attached) gJvm->DetachCurrentThread();
 });
@@ -38,7 +52,8 @@ JNIEXPORT jboolean JNICALL
 Java_com_loudnoisedetectionapp_AudioBridge_nativeStart(
         JNIEnv* env, jobject, jint deviceId, jint inputPreset,
         jfloat sensitivity, jfloatArray freqs, jfloatArray gains,
-        jboolean useAWeighting) {
+        jboolean useAWeighting, jboolean useNoiseRejection,
+        jfloat calibrationOffset, jint integrationTime) {
 
     std::vector<float> vFreqs;
     std::vector<float> vGains;
@@ -51,7 +66,7 @@ Java_com_loudnoisedetectionapp_AudioBridge_nativeStart(
         env->GetFloatArrayRegion(gains, 0, len, vGains.data());
     }
 
-    return gEngine && gEngine->start(deviceId, inputPreset, sensitivity, vFreqs, vGains, useAWeighting) ? JNI_TRUE : JNI_FALSE;
+    return gEngine && gEngine->start(deviceId, inputPreset, sensitivity, vFreqs, vGains, useAWeighting, useNoiseRejection, calibrationOffset, integrationTime) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
@@ -67,6 +82,11 @@ Java_com_loudnoisedetectionapp_AudioBridge_nativeGetSessionId(JNIEnv*, jobject) 
 JNIEXPORT void JNICALL
 Java_com_loudnoisedetectionapp_AudioBridge_nativeStartRecording(JNIEnv*, jobject) {
     if (gEngine) gEngine->startRecordingSnippet();
+}
+
+JNIEXPORT void JNICALL
+Java_com_loudnoisedetectionapp_AudioBridge_nativeSetMovementIntensity(JNIEnv*, jobject, jfloat intensity) {
+    if (gEngine) gEngine->setMovementIntensity(intensity);
 }
 
 void writeWavHeader(std::ofstream& file, int dataSize, int sampleRate) {
