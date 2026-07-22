@@ -1,9 +1,11 @@
 package com.loudnoisedetectionapp
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -12,11 +14,13 @@ import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.*
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -25,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
@@ -36,7 +41,7 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NoiseHistoryScreen(onBack: () -> Unit) {
+fun NoiseHistoryScreen(onBack: () -> Unit, audioViewModel: AudioViewModel) {
     val context = LocalContext.current
     val historyManager = remember { HistoryManager(context) }
     val settingsManager = remember { SettingsManager(context) }
@@ -50,6 +55,8 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
     
     val insights = remember(groupedEvents) { historyManager.getInsights() }
 
+    var expandedHourKey by rememberSaveable { mutableStateOf<String?>(null) }
+
     // Audio Playback State
     var playingAudioPath by remember { mutableStateOf<String?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -61,6 +68,7 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(playing: Boolean) {
                     isPlaying = playing
+                    AudioBridge.isAppPlayingPlayback = playing
                     if (playing) {
                         totalDuration = duration.coerceAtLeast(0)
                     }
@@ -99,8 +107,21 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                 },
                 actions = {
                     IconButton(onClick = {
+                        HistoryExporter.exportToCsv(context, historyManager.getAllEvents())
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Export CSV")
+                    }
+                    IconButton(onClick = {
                         historyManager.clearHistory()
                         settingsManager.clearDailyDose()
+                        audioViewModel.resetDose()
+                        
+                        // Notify service to reset its memory cache
+                        val resetIntent = Intent(context, AudioMonitorService::class.java).apply {
+                            action = AudioMonitorService.ACTION_RESET_DOSE
+                        }
+                        context.startService(resetIntent)
+
                         groupedEvents = emptyMap()
                         doseSamples = emptyList()
                         dailyTotals = emptyList()
@@ -127,17 +148,19 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                     .padding(innerPadding)
                     .fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(0.dp) 
             ) {
                 if (doseSamples.isNotEmpty()) {
                     item {
                         DoseChart(samples = doseSamples)
+                        Spacer(Modifier.height(16.dp))
                     }
                 }
 
                 if (doseBreakdown.isNotEmpty()) {
                     item {
                         DoseHeatmapChart(breakdown = doseBreakdown)
+                        Spacer(Modifier.height(16.dp))
                     }
                 }
 
@@ -148,6 +171,7 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                             totals = dailyTotals,
                             days = 7
                         )
+                        Spacer(Modifier.height(16.dp))
                     }
                 }
 
@@ -155,18 +179,23 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(Modifier.padding(16.dp)) {
+                        Column(
+                            Modifier.padding(16.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text("Insights", style = MaterialTheme.typography.titleLarge)
                             Spacer(Modifier.height(8.dp))
-                            Text("Average Level: ${"%.1f".format(insights.avgDb)} dB")
-                            Text("Peak Detected: ${"%.1f".format(insights.maxDb)} dB")
-                            Text("Typical Frequency: ${insights.mostFrequentHz.toInt()} Hz")
+                            Text("Average Level: ${"%.1f".format(insights.avgDb)} dB", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Text("Peak Detected: ${"%.1f".format(insights.maxDb)} dB", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Text("Typical Frequency: ${insights.mostFrequentHz.toInt()} Hz", textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             Spacer(Modifier.height(8.dp))
-                            Text(insights.trend, style = MaterialTheme.typography.bodyMedium)
+                            Text(insights.trend, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         }
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
 
                 groupedEvents.forEach { (date, events) ->
@@ -175,214 +204,332 @@ fun NoiseHistoryScreen(onBack: () -> Unit) {
                             text = date,
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 8.dp)
+                            modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
                         )
                     }
-                    items(events, key = { it.timestamp }) { event ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                        ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = if (event.isDay) Icons.Default.WbSunny else Icons.Default.NightsStay,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp),
-                                            tint = if (event.isDay) Color(0xFFFFB300) else Color(0xFF9FA8DA)
-                                        )
-                                        Spacer(Modifier.width(4.dp))
-                                        Text(
-                                            text = "${event.timeString} (${event.durationSeconds.toInt()}s)",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
-                                    }
-                                    Text(
-                                        text = "${event.db.toInt()} dB",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                                if (event.isSelfNoise) {
-                                    Text(
-                                        text = "⚠ Internal Speaker Active",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.tertiary
-                                    )
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "1st Dominant",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline
-                                        )
-                                        Text(
-                                            text = "${event.freq1.toInt()} Hz",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    }
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "2nd Dominant",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline
-                                        )
-                                        Text(
-                                            text = "${event.freq2.toInt()} Hz",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    text = "Recommendation:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = event.getRecommendation(),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
 
-                                if (event.latitude != null && event.longitude != null) {
-                                    val lat = event.latitude
-                                    val lon = event.longitude
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        TextButton(
-                                            onClick = {
-                                                val uri = "geo:$lat,$lon?q=$lat,$lon(Loud Noise)"
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-                                                context.startActivity(intent)
-                                            },
-                                            contentPadding = PaddingValues(0.dp),
-                                            modifier = Modifier.height(32.dp)
-                                        ) {
-                                            Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("View on Map", style = MaterialTheme.typography.labelMedium)
-                                        }
-                                        
-                                        if (event.audioPath != null) {
-                                            Spacer(Modifier.weight(1f))
-                                            IconButton(
-                                                onClick = {
-                                                    if (playingAudioPath == event.audioPath) {
-                                                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                                                    } else {
-                                                        playingAudioPath = event.audioPath
-                                                        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(java.io.File(event.audioPath))))
-                                                        exoPlayer.prepare()
-                                                        exoPlayer.play()
+                    val eventsByHour = events.reversed().groupBy { 
+                        val cal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+                        SimpleDateFormat("hh a", Locale.getDefault()).format(cal.time)
+                    }
+
+                    eventsByHour.forEach { (hour, hourEvents) ->
+                        val avgDb = hourEvents.map { it.db }.average()
+                        val hourKey = "$date-$hour"
+                        val isExpanded = expandedHourKey == hourKey
+
+                        item(key = hourKey) {
+                            Row(
+                                modifier = Modifier.height(IntrinsicSize.Min),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Permanent gutter for the vertical line to prevent jumping
+                                Box(
+                                    modifier = Modifier
+                                        .width(2.dp)
+                                        .fillMaxHeight()
+                                        .padding(top = if (isExpanded) 24.dp else 0.dp)
+                                        .background(
+                                            color = if (isExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent,
+                                            shape = RoundedCornerShape(topStart = 1.dp, topEnd = 1.dp)
+                                        )
+                                )
+                                
+                                Spacer(Modifier.width(12.dp))
+                                
+                                Card(
+                                    onClick = { 
+                                        expandedHourKey = if (isExpanded) null else hourKey
+                                    },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Level Indicator Bar
+                                        Box(
+                                            modifier = Modifier
+                                                .width(6.dp)
+                                                .fillMaxHeight()
+                                                .background(
+                                                    when {
+                                                        avgDb < 70 -> Color(0xFF4CAF50)
+                                                        avgDb < 85 -> Color(0xFFFFC107)
+                                                        else -> Color(0xFFF44336)
                                                     }
-                                                },
-                                                modifier = Modifier.size(32.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (playingAudioPath == event.audioPath && isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                                    contentDescription = if (isPlaying) "Pause Audio" else "Play Audio"
                                                 )
-                                            }
-                                        }
-                                    }
+                                        )
 
-                                    if (playingAudioPath == event.audioPath && event.audioPath != null) {
-                                        Column(modifier = Modifier.padding(top = 8.dp)) {
-                                            Slider(
-                                                value = currentPosition.toFloat(),
-                                                onValueChange = { 
-                                                    currentPosition = it.toLong()
-                                                    exoPlayer.seekTo(it.toLong())
-                                                },
-                                                valueRange = 0f..(totalDuration.toFloat().coerceAtLeast(1f)),
-                                                modifier = Modifier.fillMaxWidth().height(24.dp)
-                                            )
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Text(
-                                                    text = formatDuration(currentPosition),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.outline
-                                                )
-                                                Text(
-                                                    text = formatDuration(totalDuration),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.outline
-                                                )
-                                            }
-                                        }
-                                    }
-                                } else if (event.audioPath != null) {
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(
-                                            onClick = {
-                                                if (playingAudioPath == event.audioPath) {
-                                                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                                                } else {
-                                                    playingAudioPath = event.audioPath
-                                                    exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(java.io.File(event.audioPath))))
-                                                    exoPlayer.prepare()
-                                                    exoPlayer.play()
-                                                }
-                                            },
-                                            modifier = Modifier.size(32.dp)
+                                        Row(
+                                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = if (playingAudioPath == event.audioPath && isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                                contentDescription = if (isPlaying) "Pause Audio" else "Play Audio"
-                                            )
-                                        }
-
-                                        if (playingAudioPath == event.audioPath) {
-                                            Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-                                                Slider(
-                                                    value = currentPosition.toFloat(),
-                                                    onValueChange = { 
-                                                        currentPosition = it.toLong()
-                                                        exoPlayer.seekTo(it.toLong())
-                                                    },
-                                                    valueRange = 0f..(totalDuration.toFloat().coerceAtLeast(1f)),
-                                                    modifier = Modifier.fillMaxWidth().height(24.dp)
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(text = hour, style = MaterialTheme.typography.titleMedium)
+                                                Text(
+                                                    text = "${hourEvents.size} events recorded",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.outline
                                                 )
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) {
-                                                    Text(
-                                                        text = formatDuration(currentPosition),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.outline
-                                                    )
-                                                    Text(
-                                                        text = formatDuration(totalDuration),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.outline
-                                                    )
-                                                }
                                             }
+                                            Text(
+                                                text = "Avg: ${avgDb.toInt()} dB",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = when {
+                                                    avgDb < 70 -> Color(0xFF81C784)
+                                                    avgDb < 85 -> Color(0xFFFFD54F)
+                                                    else -> Color(0xFFE57373)
+                                                },
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                            )
                                         }
                                     }
                                 }
                             }
                         }
+
+                        if (isExpanded) {
+                            items(hourEvents.size, key = { hourEvents[it].timestamp }) { index ->
+                                val event = hourEvents[index]
+                                val isLast = index == hourEvents.size - 1
+                                
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(IntrinsicSize.Min),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Vertical line to indicate grouping
+                                    Box(
+                                        modifier = Modifier
+                                            .width(2.dp)
+                                            .fillMaxHeight()
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                                            )
+                                            .then(
+                                                if (isLast) Modifier.fillMaxHeight(0.5f) else Modifier
+                                            )
+                                    )
+                                    
+                                    Spacer(Modifier.width(12.dp))
+
+                                    Box(modifier = Modifier.padding(vertical = 8.dp)) {
+                                        NoiseEventCard(
+                                            event = event,
+                                            playingAudioPath = playingAudioPath,
+                                            isPlaying = isPlaying,
+                                            currentPosition = currentPosition,
+                                            totalDuration = totalDuration,
+                                            exoPlayer = exoPlayer,
+                                            onPlayToggle = { path ->
+                                                if (playingAudioPath == path) {
+                                                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                                } else {
+                                                    playingAudioPath = path
+                                                    exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(java.io.File(path))))
+                                                    exoPlayer.prepare()
+                                                    exoPlayer.play()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            item {
+                                Spacer(Modifier.height(16.dp))
+                            }
+                        } else {
+                            item {
+                                Spacer(Modifier.height(12.dp))
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun NoiseEventCard(
+    event: NoiseEvent,
+    playingAudioPath: String?,
+    isPlaying: Boolean,
+    currentPosition: Long,
+    totalDuration: Long,
+    exoPlayer: ExoPlayer,
+    onPlayToggle: (String) -> Unit
+) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (event.isDay) Icons.Default.WbSunny else Icons.Default.NightsStay,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = if (event.isDay) Color(0xFFFFB300) else Color(0xFF9FA8DA)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "${event.timeString} (${event.durationSeconds.toInt()}s)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                Text(
+                    text = "${event.db.toInt()} dB",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            if (event.isSelfNoise) {
+                Text(
+                    text = "⚠ Internal Speaker Active",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "1st Dominant",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        text = "${event.freq1.toInt()} Hz",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "2nd Dominant",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        text = "${event.freq2.toInt()} Hz",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Recommendation:",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = event.getRecommendation(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (event.latitude != null && event.longitude != null) {
+                val lat = event.latitude
+                val lon = event.longitude
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = {
+                            val uri = "geo:$lat,$lon?q=$lat,$lon(Loud Noise)"
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                            context.startActivity(intent)
+                        },
+                        contentPadding = PaddingValues(0.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("View on Map", style = MaterialTheme.typography.labelMedium)
+                    }
+                    
+                    if (event.audioPath != null) {
+                        Spacer(Modifier.weight(1f))
+                        IconButton(
+                            onClick = { onPlayToggle(event.audioPath) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (playingAudioPath == event.audioPath && isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause Audio" else "Play Audio"
+                            )
+                        }
+                    }
+                }
+
+                if (playingAudioPath == event.audioPath && event.audioPath != null) {
+                    AudioPlayerUI(currentPosition, totalDuration, exoPlayer)
+                }
+            } else if (event.audioPath != null) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { onPlayToggle(event.audioPath) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (playingAudioPath == event.audioPath && isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause Audio" else "Play Audio"
+                        )
+                    }
+
+                    if (playingAudioPath == event.audioPath) {
+                        Box(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                            AudioPlayerUI(currentPosition, totalDuration, exoPlayer)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AudioPlayerUI(currentPosition: Long, totalDuration: Long, exoPlayer: ExoPlayer) {
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        Slider(
+            value = currentPosition.toFloat(),
+            onValueChange = { 
+                exoPlayer.seekTo(it.toLong())
+            },
+            valueRange = 0f..(totalDuration.toFloat().coerceAtLeast(1f)),
+            modifier = Modifier.fillMaxWidth().height(24.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = formatDuration(currentPosition),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Text(
+                text = formatDuration(totalDuration),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
         }
     }
 }

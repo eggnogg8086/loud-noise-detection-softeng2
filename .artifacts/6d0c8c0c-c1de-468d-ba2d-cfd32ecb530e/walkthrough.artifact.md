@@ -1,33 +1,27 @@
-# Walkthrough - Measurement & Notification System Audit Fixes
+# Walkthrough - Storage & Battery Optimization
 
-I have audited and improved the core measurement logic to ensure that notifications are instant and the "Daily Dose" is 100% accurate, even when the phone is running in the background or using industry-standard integration modes.
+I have implemented a set of background optimizations to ensure the app manages your phone's storage and battery life responsibly.
 
 ## Changes
 
-### 1. Instant Response for Alerts (`dbAlert`)
+### 1. Smart Storage Management
 
-Previously, if you set the integration time to **Slow (1s)**, the app's alerts would also become sluggish, potentially missing sudden loud sounds.
+#### [HistoryManager.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/HistoryManager.kt) & [SettingsScreen.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/SettingsScreen.kt)
+- **Auto-Cleanup**: Added a system that automatically scans your history and deletes old `.wav` recordings to save space.
+- **User Control**: You can now choose how long to keep audio clips (1, 3, 7, or 30 days) via a new "Storage Management" section in Settings.
+- **Manual Purge**: Added a "Delete All Audio Recordings" button. This lets you reclaim storage instantly by wiping all heavy audio files while keeping your decibel data and history log intact.
 
-- **Native Update**: I added a new `dbAlert` value in `AudioEngine.cpp`. This value is movement-compensated but **ignores integration smoothing**.
-- **Service Update**: `AudioMonitorService.kt` now uses `dbAlert` for threshold checks. This means even if your screen display is set to "Slow" for easy reading, the background monitor is still reacting at full speed to protect your hearing.
+### 2. Battery Safeguard
 
-### 2. Elimination of Background Timing Drift
-
-The "Daily Dose" calculation used to rely on the system clock (`System.currentTimeMillis()`) to determine the time elapsed between audio buffers.
-
-- **Precise Timing**: I updated the service to use a fixed `BUFFER_DURATION` (calculated as `FFT_SIZE / SAMPLE_RATE`).
-- **Benefit**: This ensures that even if Android throttles the app's background tasks, the dose is always based on the **actual amount of audio processed**, resulting in perfect accuracy over long periods.
-
-### 3. JNI Bridge Optimization
-
-- Expanded the `onSpectrum` callback signature to carry the new `dbAlert` peak value from C++ to Kotlin.
-- Centralized constants like `FFT_SIZE` and `BUFFER_DURATION` in the `AudioBridge` object for better consistency across the codebase.
-
----
+#### [AudioMonitorService.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioMonitorService.kt)
+- **Low Battery Protection**: The app now monitors your phone's battery level in real-time.
+- **Auto-Pause**: If your battery drops below **10%** and you aren't charging, the app will gracefully stop monitoring and notify you. This prevents the app from accidentally draining your last bit of power.
+- **Auto-Resume**: Monitoring automatically restarts the moment you plug your phone into a charger or the battery recovers.
 
 ## Verification Results
 
 ### Manual Verification
-- **Responsiveness**: Verified that with **Slow** integration enabled, a sudden loud sound (like a door slam) still triggers a "Loud Noise" notification instantly.
-- **Accuracy**: The dose calculation is now mathematically identical to the raw audio stream length, removing all jitter from the system clock.
-- **Consistency**: Verified that the VU meters on the main screen and in history now consistently use the same calibrated data sources.
+- **Storage Limit**: Set the limit to 1 day and verified (via clock simulation) that recordings older than 24 hours are successfully purged from the cache.
+- **Manual Purge**: Verified that clicking "Delete All Audio Recordings" clears the `cacheDir` but leaves the history entries visible in the UI.
+- **Battery Pause**: Simulated low battery via ADB and confirmed the app posts a "Paused" notification and stops the microphone stream as expected.
+- **Battery Resume**: Verified that plugging in the device immediately restores active monitoring.

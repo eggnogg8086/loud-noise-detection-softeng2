@@ -122,7 +122,7 @@ class AudioViewModel : ViewModel() {
                 val domFreq = (maxIdx * HERTZ_PER_CELL).toFloat()
                 spectroState.dominantFrequency = domFreq
 
-                val threshold = settingsManager?.thresholdDb ?: 82f
+                val threshold = settingsManager?.thresholdDb ?: SettingsManager.DEFAULT_THRESHOLD
                 if (dbAlert > threshold && (now - lastAnnotationTime > ANNOTATION_THROTTLE_MS)) {
                     val isHandling = AudioBridge.movementIntensity > 0.8f
                     val color = if (isHandling) Color.Gray else Color.Yellow
@@ -147,6 +147,10 @@ class AudioViewModel : ViewModel() {
     fun resetCalibration() {
         calibrationManager?.reset()
         maxDb = 100f
+    }
+
+    fun resetDose() {
+        dailyDose = 0f
     }
 
     init {

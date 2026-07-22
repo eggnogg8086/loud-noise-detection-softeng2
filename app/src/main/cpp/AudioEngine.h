@@ -41,6 +41,8 @@ private:
     kiss_fftr_cfg mFftCfg;
     std::vector<float> mWindow;
     std::vector<float> mInputBuffer;
+    std::vector<float> mWindowedBuffer;
+    std::vector<float> mSpectrumBuffer;
     std::vector<kiss_fft_cpx> mFftOutput;
     std::vector<float> mFreqCompensation;
     std::vector<float> mAWeighting;

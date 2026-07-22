@@ -15,6 +15,9 @@ object AudioBridge {
     @Volatile
     var isSelfNoiseActive = false
 
+    @Volatile
+    var isAppPlayingPlayback = false
+
     const val FFT_SIZE = 8192
     const val SAMPLE_RATE = 44100
     const val BUFFER_DURATION = FFT_SIZE.toDouble() / SAMPLE_RATE

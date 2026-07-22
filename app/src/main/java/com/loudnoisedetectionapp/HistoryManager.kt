@@ -1,7 +1,9 @@
 package com.loudnoisedetectionapp
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
+import java.io.File
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
@@ -64,36 +66,52 @@ data class HistoryInsights(
 
 class HistoryManager(context: Context) {
     private val prefs = context.getSharedPreferences("noise_history", Context.MODE_PRIVATE)
+    
+    @Volatile
+    private var cachedEvents: List<NoiseEvent>? = null
+    private val cacheLock = Any()
 
     fun addEvent(db: Float, f1: Float, f2: Float, duration: Float, lat: Double? = null, lon: Double? = null, audio: String? = null, isSelfNoise: Boolean = false) {
         val event = NoiseEvent(System.currentTimeMillis() - (duration * 1000).toLong(), db, f1, f2, duration, lat, lon, audio, isSelfNoise)
-        val events = getAllEvents().toMutableList()
-        events.add(event)
-        saveEvents(events)
+        
+        synchronized(cacheLock) {
+            val events = getAllEvents().toMutableList()
+            events.add(event)
+            cachedEvents = events
+            saveEvents(events)
+        }
     }
 
     fun getAllEvents(): List<NoiseEvent> {
-        val jsonString = prefs.getString("events", "[]") ?: "[]"
-        return try {
-            val jsonArray = JSONArray(jsonString)
-            val list = mutableListOf<NoiseEvent>()
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.getJSONObject(i)
-                list.add(NoiseEvent(
-                    obj.getLong("t"),
-                    obj.getDouble("d").toFloat(),
-                    obj.getDouble("f1").toFloat(),
-                    obj.getDouble("f2").toFloat(),
-                    obj.optDouble("dur", 0.0).toFloat(),
-                    if (obj.has("lat")) obj.getDouble("lat") else null,
-                    if (obj.has("lon")) obj.getDouble("lon") else null,
-                    if (obj.has("path")) obj.getString("path") else null,
-                    obj.optBoolean("self", false)
-                ))
+        cachedEvents?.let { return it }
+        
+        synchronized(cacheLock) {
+            cachedEvents?.let { return it }
+            
+            val jsonString = prefs.getString("events", "[]") ?: "[]"
+            val events = try {
+                val jsonArray = JSONArray(jsonString)
+                val list = mutableListOf<NoiseEvent>()
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    list.add(NoiseEvent(
+                        obj.getLong("t"),
+                        obj.getDouble("d").toFloat(),
+                        obj.getDouble("f1").toFloat(),
+                        obj.getDouble("f2").toFloat(),
+                        obj.optDouble("dur", 0.0).toFloat(),
+                        if (obj.has("lat")) obj.getDouble("lat") else null,
+                        if (obj.has("lon")) obj.getDouble("lon") else null,
+                        if (obj.has("path")) obj.getString("path") else null,
+                        obj.optBoolean("self", false)
+                    ))
+                }
+                list
+            } catch (e: Exception) {
+                emptyList()
             }
-            list
-        } catch (e: Exception) {
-            emptyList()
+            cachedEvents = events
+            return events
         }
     }
 
@@ -259,11 +277,42 @@ class HistoryManager(context: Context) {
     }
 
     fun clearHistory() {
+        cachedEvents = null
+        // Also delete all audio files before clearing references
+        deleteAllAudioFiles()
         prefs.edit()
             .remove("events")
             .remove("dose_samples")
             .remove("daily_totals")
             .remove("dose_breakdowns")
             .apply()
+    }
+
+    fun deleteAllAudioFiles() {
+        val events = getAllEvents()
+        events.forEach { event ->
+            event.audioPath?.let { path ->
+                val file = File(path)
+                if (file.exists()) file.delete()
+            }
+        }
+    }
+
+    fun performAutoCleanup(limitDays: Int) {
+        val events = getAllEvents()
+        val now = System.currentTimeMillis()
+        val limitMillis = limitDays * 24 * 60 * 60 * 1000L
+        
+        events.forEach { event ->
+            if (now - event.timestamp > limitMillis) {
+                event.audioPath?.let { path ->
+                    val file = File(path)
+                    if (file.exists()) {
+                        file.delete()
+                        android.util.Log.d("HistoryManager", "Auto-deleted old recording: $path")
+                    }
+                }
+            }
+        }
     }
 }

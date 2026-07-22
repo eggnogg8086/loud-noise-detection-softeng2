@@ -5,8 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -28,14 +30,12 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import androidx.glance.appwidget.updateAll
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudioFocusChangeListener {
+class AudioMonitorService : Service(), SensorEventListener {
 
     companion object {
         private const val FOREGROUND_CHANNEL_ID = "audio_monitor_service"
@@ -44,7 +44,8 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         private const val FOREGROUND_ID = 1
         private const val ALERT_ID = 2
 
-        private const val ACTION_STOP_SERVICE = "STOP_AUDIO_MONITOR_SERVICE"
+        const val ACTION_STOP_SERVICE = "STOP_AUDIO_MONITOR_SERVICE"
+        const val ACTION_RESET_DOSE = "RESET_DAILY_DOSE"
     }
 
     private var settingsManager: SettingsManager? = null
@@ -87,14 +88,53 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
     private var echoCanceler: AcousticEchoCanceler? = null
     private var automaticGainControl: android.media.audiofx.AutomaticGainControl? = null
     private var isSelfNoiseActive = false
+    private var isLowBatteryPaused = false
+
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val workerDispatcher = newSingleThreadContext("AudioWorker")
 
     private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
         override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) {
             // Check if any playback is active through speakers
             isSelfNoiseActive = configs.any { config ->
-                config.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA
+                config.audioAttributes.usage == android.media.AudioAttributes.USAGE_MEDIA ||
+                config.audioAttributes.usage == android.media.AudioAttributes.USAGE_ALARM ||
+                config.audioAttributes.usage == android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE ||
+                config.audioAttributes.usage == android.media.AudioAttributes.USAGE_GAME
             }
             AudioBridge.isSelfNoiseActive = isSelfNoiseActive
+        }
+    }
+
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val level = intent?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = intent?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val status = intent?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+            val batteryPct = level * 100 / scale.toFloat()
+            val isCharging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                             status == android.os.BatteryManager.BATTERY_STATUS_FULL
+
+            if (batteryPct < 10 && !isCharging && !isLowBatteryPaused) {
+                Log.w("AudioMonitorService", "Battery low ($batteryPct%). Pausing monitoring.")
+                pauseMonitoringForBattery(true)
+            } else if ((batteryPct >= 15 || isCharging) && isLowBatteryPaused) {
+                Log.i("AudioMonitorService", "Battery recovered or charging. Resuming monitoring.")
+                pauseMonitoringForBattery(false)
+            }
+        }
+    }
+
+    private fun pauseMonitoringForBattery(paused: Boolean) {
+        isLowBatteryPaused = paused
+        if (paused) {
+            AudioBridge.stop()
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager.notify(FOREGROUND_ID, buildForegroundNotification("Paused: Low Battery (<10%)"))
+        } else {
+            startMonitoring()
         }
     }
 
@@ -116,6 +156,10 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_RESET_DOSE) {
+            exposureManager?.reset()
+            return START_STICKY
         }
         // Restart if settings changed
         if (intent?.getBooleanExtra("restart", false) == true) {
@@ -186,6 +230,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         audioManager.registerAudioPlaybackCallback(playbackCallback, Handler(Looper.getMainLooper()))
+        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
 
         // Initialize wake lock to prevent CPU sleep during long-term monitoring
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -202,6 +247,11 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         logMicrophoneSpecs()
         startMonitoring()
         watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_INTERVAL_MS)
+
+        // Initial cleanup
+        if (settingsManager?.autoCleanupEnabled == true) {
+            historyManager?.performAutoCleanup(settingsManager?.storageLimitDays ?: 7)
+        }
     }
 
     private fun restartMonitoring() {
@@ -221,25 +271,35 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             rejectionActive: Boolean,
             channelCount: Int
         ) {
-            val now = System.currentTimeMillis()
+            serviceScope.launch(workerDispatcher) {
+                processAudioEvent(spectrum, db, dbAlert)
+            }
+        }
+    }
 
-        // Movement-based noise compensation is now handled in the native engine.
-        // We directly use the 'db' value received here.
+    private fun processAudioEvent(
+        spectrum: FloatArray,
+        db: Float,
+        dbAlert: Float
+    ) {
+        val now = System.currentTimeMillis()
 
         // Fix: Use exact buffer duration for dose calculation to avoid timing drift
         val deltaTimeSeconds = AudioBridge.BUFFER_DURATION.toFloat()
         exposureManager?.addExposure(db, deltaTimeSeconds)
         
         if (exposureManager?.shouldNotify() == true) {
-            sendExposureNotification(exposureManager?.getCurrentDose() ?: 0f)
+            val isCritical = exposureManager?.isCriticalDose() ?: false
+            sendExposureNotification(exposureManager?.getCurrentDose() ?: 0f, isCritical)
             exposureManager?.markNotified()
         }
         lastCallbackTime = now
 
-        // Widget Update
+        // Widget & Notification Update
         if (now - lastWidgetUpdateTime > WIDGET_UPDATE_INTERVAL_MS) {
             val dose = exposureManager?.getCurrentDose() ?: 0f
             updateWidget(db, dose)
+            updateForegroundNotification(db, (dose * 100).toInt())
             lastWidgetUpdateTime = now
         }
 
@@ -249,7 +309,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             lastDoseSampleTime = now
         }
 
-        val threshold = settingsManager?.thresholdDb ?: 82f
+        val threshold = settingsManager?.thresholdDb ?: SettingsManager.DEFAULT_THRESHOLD
 
         // Fix: Use dbAlert (responsive peak) for threshold checks
         if (dbAlert > threshold) {
@@ -262,7 +322,9 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
                 episodeF1Sum = freqs.first
                 episodeF2Sum = freqs.second
                 episodeSampleCount = 1
-                wasSelfNoiseInEpisode = isSelfNoiseActive
+                
+                // Use isSelfNoiseActive (from callback) OR the immediate isMusicActive check
+                wasSelfNoiseInEpisode = isSelfNoiseActive || audioManager.isMusicActive
 
                 AudioBridge.startRecording()
                 
@@ -284,32 +346,36 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
                 episodeF1Sum += freqs.first
                 episodeF2Sum += freqs.second
                 episodeSampleCount++
-                if (isSelfNoiseActive) wasSelfNoiseInEpisode = true
+                if (isSelfNoiseActive || audioManager.isMusicActive) wasSelfNoiseInEpisode = true
             }
         } else {
             if (isLoudEpisodeActive && (now - lastLoudTime > EPISODE_TIMEOUT_MS)) {
                 // End Episode
                 val duration = (lastLoudTime - episodeStartTime) / 1000f
-                if (duration > (settingsManager?.durationSeconds ?: 1f)) {
+                if (duration > (settingsManager?.durationSeconds ?: SettingsManager.DEFAULT_DURATION)) {
                     val snippetFileName = "noise_${System.currentTimeMillis()}.wav"
                     val snippetFile = java.io.File(cacheDir, snippetFileName)
                     val saved = AudioBridge.saveSnippet(snippetFile.absolutePath)
                     val snippetPath = if (saved) snippetFile.absolutePath else null
 
-                    historyManager?.addEvent(
-                        episodeMaxDb,
-                        episodeF1Sum / episodeSampleCount,
-                        episodeF2Sum / episodeSampleCount,
-                        duration,
-                        episodeLat,
-                        episodeLon,
-                        snippetPath,
-                        wasSelfNoiseInEpisode
-                    )
+                    if (!wasSelfNoiseInEpisode) {
+                        historyManager?.addEvent(
+                            episodeMaxDb,
+                            episodeF1Sum / episodeSampleCount,
+                            episodeF2Sum / episodeSampleCount,
+                            duration,
+                            episodeLat,
+                            episodeLon,
+                            snippetPath,
+                            wasSelfNoiseInEpisode
+                        )
 
-                    if (now - lastNotificationTime > NOTIFICATION_COOLDOWN) {
-                        sendLoudNoiseNotification(episodeMaxDb.toDouble(), duration)
-                        lastNotificationTime = now
+                        if (now - lastNotificationTime > NOTIFICATION_COOLDOWN) {
+                            sendLoudNoiseNotification(episodeMaxDb.toDouble(), duration)
+                            lastNotificationTime = now
+                        }
+                    } else {
+                        Log.d("AudioMonitorService", "Ignoring loud episode: Internal speaker was active")
                     }
                 }
                 isLoudEpisodeActive = false
@@ -317,7 +383,6 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
                 episodeLon = null
                 wasSelfNoiseInEpisode = false
             }
-        }
         }
     }
 
@@ -356,8 +421,10 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             wakeLock?.release()
         }
         audioManager.unregisterAudioPlaybackCallback(playbackCallback)
+        unregisterReceiver(batteryReceiver)
         sensorManager.unregisterListener(this)
-        audioManager.abandonAudioFocus(this)
+        serviceJob.cancel()
+        workerDispatcher.close()
         releaseEchoCanceler()
         releaseAutomaticGainControl()
         exposureManager?.persist()
@@ -365,19 +432,6 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         AudioBridge.stop()
         AudioBridge.destroy()
         super.onDestroy()
-    }
-
-    override fun onAudioFocusChange(focusChange: Int) {
-        when (focusChange) {
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                Log.d("AudioMonitorService", "Audio focus gained, starting/resuming monitoring")
-                startMonitoring()
-            }
-            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                Log.d("AudioMonitorService", "Audio focus lost, stopping monitoring")
-                AudioBridge.stop()
-            }
-        }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
@@ -410,6 +464,11 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
                 // Ignore widget update errors
             }
         }
+    }
+
+    private fun updateForegroundNotification(db: Float, dosePercentage: Int) {
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.notify(FOREGROUND_ID, buildForegroundNotification("${db.toInt()} dB | Dose: $dosePercentage%"))
     }
 
     private fun manageAcousticEchoCanceler() {
@@ -464,22 +523,14 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
     }
 
     private fun startMonitoring() {
-        val result = audioManager.requestAudioFocus(
-            this,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
-        )
-
-        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            Log.e("AudioMonitorService", "Could not gain audio focus, monitoring might be restricted")
-        }
-
         val deviceId = settingsManager?.selectedMicId ?: -1
         val preset = settingsManager?.audioPreset ?: 9
         val (sensitivity, freqs, gains) = fetchMicrophoneInfo(deviceId)
         val useAWeighting = settingsManager?.useAWeighting ?: true
         val useNoiseRejection = settingsManager?.intelligentNoiseRejection ?: true
-        val calibrationOffset = settingsManager?.calibrationOffset ?: 0f
+        
+        // Fix: Use per-device calibration offset
+        val calibrationOffset = settingsManager?.getCalibrationOffset(deviceId) ?: 0f
         val integrationTime = settingsManager?.integrationTime ?: 0
 
         AudioBridge.addCallback(serviceCallback)
@@ -513,7 +564,39 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
         }
     }
 
+    private fun isMediaPlayingOnSuppressibleSource(): Boolean {
+        if (!audioManager.isMusicActive) return false
+
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val activeMediaDevices = devices.filter { device ->
+            // In a real scenario, we might use AudioPlaybackConfiguration for better accuracy,
+            // but this is a solid heuristic.
+            device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER ||
+            device.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE ||
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+            device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+        }
+
+        // If any of the "loud" devices are active, we suppress unless headphones override is on.
+        val onHeadphones = devices.any { 
+            it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES || 
+            it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+            it.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+            it.type == AudioDeviceInfo.TYPE_HEARING_AID
+        }
+
+        if (onHeadphones && settingsManager?.allowNotifsOnHeadphones == true) {
+            return false // Don't suppress
+        }
+
+        return activeMediaDevices.isNotEmpty()
+    }
+
     private fun sendLoudNoiseNotification(db: Double, duration: Float) {
+        if (isMediaPlayingOnSuppressibleSource()) {
+            Log.d("AudioMonitorService", "Loud noise notification suppressed due to active media")
+            return
+        }
 
         val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
@@ -531,17 +614,25 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             .notify(ALERT_ID, notification)
     }
 
-    private fun sendExposureNotification(dose: Float) {
+    private fun sendExposureNotification(dose: Float, isCritical: Boolean) {
+        if (isMediaPlayingOnSuppressibleSource()) {
+            Log.d("AudioMonitorService", "Exposure notification suppressed due to active media")
+            return
+        }
 
         val percentage = (dose * 100).toInt()
+        val title = if (isCritical) "CRITICAL: Noise Exposure Limit" else "Noise Exposure Alert"
+        val message = if (isCritical) 
+            "You have reached 100% of your daily safe limit. Please move to a quiet area." 
+            else "You have reached $percentage% of your daily NIOSH noise dose limit."
 
         val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Noise Exposure Alert")
-            .setContentText("You have reached $percentage% of your daily NIOSH noise dose limit.")
+            .setContentTitle(title)
+            .setContentText(message)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-            .setVibrate(longArrayOf(0, 300))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVibrate(longArrayOf(0, 300, 100, 300))
+            .setPriority(if (isCritical) NotificationCompat.PRIORITY_MAX else NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
@@ -551,7 +642,7 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
             .notify(ALERT_ID + 1, notification)
     }
 
-    private fun buildForegroundNotification(): Notification {
+    private fun buildForegroundNotification(status: String = "Listening for loud sounds"): Notification {
         val stopIntent = Intent(this, AudioMonitorService::class.java).apply {
             action = ACTION_STOP_SERVICE
         }
@@ -566,12 +657,12 @@ class AudioMonitorService : Service(), SensorEventListener, AudioManager.OnAudio
 
         return NotificationCompat.Builder(this, FOREGROUND_CHANNEL_ID)
             .setContentTitle("Noise Monitoring")
-            .setContentText("Listening for loud sounds")
+            .setContentText(status)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .setContentIntent(mainActivityPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent)
-//            .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+            .setOnlyAlertOnce(true)
             .build()
     }
 

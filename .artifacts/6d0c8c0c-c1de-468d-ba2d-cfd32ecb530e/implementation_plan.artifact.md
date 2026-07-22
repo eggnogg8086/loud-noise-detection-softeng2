@@ -1,38 +1,51 @@
-# Implementation Plan - Measurement & Notification Audit Fixes
+# Implementation Plan - Storage & Efficiency Polish
 
-After auditing the measurement system, I've identified a few critical improvements to ensure high accuracy and reliable notifications, especially when using the new "Slow" integration mode.
-
-## Identified Issues
-
-1.  **Dose Timing Jitter**: The dose calculation currently uses `System.currentTimeMillis()` to determine how much time has passed. In a background service, the OS might delay the callback, causing the app to "over-calculate" exposure if a large gap occurs.
-2.  **Alert Sluggishness**: If a user sets the integration time to "Slow" (1s), the app becomes less responsive to sudden loud sounds (like a bang or a shout). The alert threshold check uses the smoothed value, meaning it might miss short, dangerous peaks.
-3.  **Source Inconsistency**: While the UI correctly distinguishes between raw and filtered dB, the Service logic is slightly simplified and could benefit from using the more responsive "Fast Peak" for alerts.
+This plan introduces automated storage management for recording snippets and energy-saving measures for background monitoring.
 
 ## Proposed Changes
 
-### [Component] Native Engine
+### [Component] Data Management
 
-#### [MODIFY] [AudioEngine.h](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/cpp/AudioEngine.h) / [AudioEngine.cpp](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/cpp/AudioEngine.cpp)
-- Calculate a **Movement-Compensated Peak** (`dbAlert`) that ignores "Slow" integration but still filters out phone handling noise.
-- Pass this new value through the JNI bridge.
+#### [MODIFY] [SettingsManager.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/SettingsManager.kt)
+- Add `KEY_STORAGE_LIMIT_DAYS` (default `7 days`).
+- Add `KEY_AUTO_CLEANUP_ENABLED` (default `true`).
 
-### [Component] JNI Bridge
+#### [MODIFY] [HistoryManager.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/HistoryManager.kt)
+- Add `performAutoCleanup()` method:
+    - Scans the history for events older than the storage limit.
+    - Deletes the associated `.wav` snippet files from `cacheDir`.
+    - Removes the events from the JSON history if desired, or just cleans the heavy audio files. (Recommendation: keep JSON, delete WAV).
 
-#### [MODIFY] [AudioBridge.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioBridge.kt) / [AudioBridge.cpp](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/cpp/AudioBridge.cpp) / [SpectrumCallback.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/SpectrumCallback.kt)
-- Add a new parameter `dbAlert` to the `onSpectrum` callback.
-
-### [Component] Audio Service
+### [Component] Audio Service & Efficiency
 
 #### [MODIFY] [AudioMonitorService.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/AudioMonitorService.kt)
-- **Precise Dose Timing**: Replace `System.currentTimeMillis()` logic with a constant `BUFFER_DURATION` (calculated as `FFT_SIZE / SAMPLE_RATE`). This ensures the dose is always based on the exact amount of audio processed.
-- **Responsive Alerts**: Use the new `dbAlert` for threshold checks. This ensures that even in "Slow" mode, the app will instantly notify you of sudden loud sounds.
+- **Daily Cleanup**: Run `HistoryManager.performAutoCleanup()` once every 24 hours (or upon service start).
+- **Battery Safeguard**:
+    - Register a `BatteryManager` receiver.
+    - If battery drops below 10% (and not charging), post a notification: "Monitoring paused due to low battery" and stop monitoring.
+    - Resume when charging starts.
+
+### [Component] UI
+
+#### [MODIFY] [SettingsScreen.kt](file:///C:/Users/juanp/Documents/loud-noise-detection-softeng2/app/src/main/java/com/loudnoisedetectionapp/SettingsScreen.kt)
+- Add a new "Storage Management" section.
+- Add a slider for "Keep Recordings For" (1, 3, 7, 30 days).
+- Add a "Delete All Recordings" utility button (cleans WAVs without wiping history).
+
+---
 
 ## Verification Plan
 
 ### Manual Verification
-1.  **Dose Accuracy**: Verify the "Daily Dose" increments consistently even when the phone screen is off and the service is potentially throttled.
-2.  **Alert Responsiveness**:
-    - Set Integration Time to **Slow**.
-    - Clap loudly near the phone.
-    - Verify that the app **immediately** records a "Loud Noise" event and sends a notification, even though the main VU meter on the screen reacts slowly.
-3.  **Handling Noise**: Rub the phone case while the integration is "Slow". Verify that no alert is triggered (Movement Compensation still works).
+1.  **Cleanup Test**:
+    - Manually set the "Keep For" limit to 1 day.
+    - Record a noise event.
+    - Change device system clock to tomorrow.
+    - Restart app/service.
+    - Verify the `.wav` file is deleted from `cacheDir` while the history log remains.
+2.  **Battery Test**:
+    - Use `adb shell dumpsys battery set level 5` to simulate low battery.
+    - Verify monitoring stops and notification appears.
+    - Set battery to 50% and plug in. Verify monitoring resumes.
+3.  **Storage UI**:
+    - Verify the new slider and cleanup button work as expected in Settings.

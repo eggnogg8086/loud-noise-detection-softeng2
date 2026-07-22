@@ -27,6 +27,11 @@ class SettingsManager(context: Context) {
         private const val KEY_NOISE_FLOOR_DB = "noise_floor_db"
         private const val KEY_CALIBRATION_OFFSET = "calibration_offset"
         private const val KEY_INTEGRATION_TIME = "integration_time"
+        private const val KEY_ALLOW_NOTIFS_ON_HEADPHONES = "allow_notifs_on_headphones"
+        private const val KEY_IS_STEREO_HW = "is_stereo_hw"
+        private const val KEY_DOSE_CRITICAL_NOTIFIED = "dose_critical_notified"
+        private const val KEY_STORAGE_LIMIT_DAYS = "storage_limit_days"
+        private const val KEY_AUTO_CLEANUP_ENABLED = "auto_cleanup_enabled"
         
         // Default to -1 (Auto/Default)
         const val MIC_ID_AUTO = -1
@@ -38,8 +43,8 @@ class SettingsManager(context: Context) {
         const val INTEGRATION_FAST = 0 // 125ms
         const val INTEGRATION_SLOW = 1 // 1000ms
 
-        const val DEFAULT_THRESHOLD = 82f
-        const val DEFAULT_DURATION = 1f // 1 second
+        const val DEFAULT_THRESHOLD = 90f
+        const val DEFAULT_DURATION = 2f // 2 seconds
         const val DEFAULT_NIOSH_RATIO = 0.8f
     }
 
@@ -60,11 +65,21 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putInt(KEY_AUDIO_PRESET, value).apply()
 
     var calibrationOffset: Float
-        get() = prefs.getFloat(KEY_CALIBRATION_OFFSET, 0f)
-        set(value) = prefs.edit().putFloat(KEY_CALIBRATION_OFFSET, value).apply()
+        get() = getCalibrationOffset(selectedMicId)
+        set(value) = setCalibrationOffset(selectedMicId, value)
+
+    fun getCalibrationOffset(deviceId: Int): Float {
+        val key = if (deviceId == MIC_ID_AUTO) KEY_CALIBRATION_OFFSET else "${KEY_CALIBRATION_OFFSET}_$deviceId"
+        return prefs.getFloat(key, 0f)
+    }
+
+    fun setCalibrationOffset(deviceId: Int, offset: Float) {
+        val key = if (deviceId == MIC_ID_AUTO) KEY_CALIBRATION_OFFSET else "${KEY_CALIBRATION_OFFSET}_$deviceId"
+        prefs.edit().putFloat(key, offset).apply()
+    }
 
     var integrationTime: Int
-        get() = prefs.getInt(KEY_INTEGRATION_TIME, INTEGRATION_FAST)
+        get() = prefs.getInt(KEY_INTEGRATION_TIME, INTEGRATION_SLOW)
         set(value) = prefs.edit().putInt(KEY_INTEGRATION_TIME, value).apply()
 
     var nioshEnabled: Boolean
@@ -86,6 +101,10 @@ class SettingsManager(context: Context) {
     var doseNotifiedToday: Boolean
         get() = prefs.getBoolean(KEY_DOSE_NOTIFIED_TODAY, false)
         set(value) = prefs.edit().putBoolean(KEY_DOSE_NOTIFIED_TODAY, value).apply()
+
+    var doseCriticalNotifiedToday: Boolean
+        get() = prefs.getBoolean(KEY_DOSE_CRITICAL_NOTIFIED, false)
+        set(value) = prefs.edit().putBoolean(KEY_DOSE_CRITICAL_NOTIFIED, value).apply()
 
     var useAWeighting: Boolean
         get() = prefs.getBoolean(KEY_USE_A_WEIGHTING, true) // Default to true for dBA
@@ -110,6 +129,22 @@ class SettingsManager(context: Context) {
     var noiseFloorDb: Float
         get() = prefs.getFloat(KEY_NOISE_FLOOR_DB, 30f)
         set(value) = prefs.edit().putFloat(KEY_NOISE_FLOOR_DB, value).apply()
+
+    var allowNotifsOnHeadphones: Boolean
+        get() = prefs.getBoolean(KEY_ALLOW_NOTIFS_ON_HEADPHONES, false)
+        set(value) = prefs.edit().putBoolean(KEY_ALLOW_NOTIFS_ON_HEADPHONES, value).apply()
+
+    var isStereoHardware: Boolean
+        get() = prefs.getBoolean(KEY_IS_STEREO_HW, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_STEREO_HW, value).apply()
+
+    var storageLimitDays: Int
+        get() = prefs.getInt(KEY_STORAGE_LIMIT_DAYS, 7)
+        set(value) = prefs.edit().putInt(KEY_STORAGE_LIMIT_DAYS, value).apply()
+
+    var autoCleanupEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_CLEANUP_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_CLEANUP_ENABLED, value).apply()
 
     fun clearDailyDose() {
         prefs.edit()

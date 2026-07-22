@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.Collections
 import kotlin.math.pow
 
 class ExposureManager(context: Context) {
@@ -11,16 +12,19 @@ class ExposureManager(context: Context) {
     private val history = HistoryManager(context)
     
     // In-memory cache to avoid frequent SharedPreferences reads/writes on audio thread
+    @Volatile
     private var cachedDose: Float = 0f
-    private var cachedBreakdown = mutableMapOf<String, Float>()
+    private val cachedBreakdown = Collections.synchronizedMap(mutableMapOf<String, Float>())
+    @Volatile
     private var lastPersistTime: Long = 0L
     private val PERSIST_INTERVAL_MS = 5000L // Persist every 5 seconds
+    @Volatile
     private var lastUpdateDayOfYear: Int = -1
 
     init {
         cachedDose = settings.dailyDose
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        cachedBreakdown = history.getDoseBreakdown(todayStr).toMutableMap()
+        cachedBreakdown.putAll(history.getDoseBreakdown(todayStr))
         lastUpdateDayOfYear = getDayOfYear(settings.lastDoseUpdate)
         checkDailyReset()
     }
@@ -30,6 +34,11 @@ class ExposureManager(context: Context) {
      */
     fun addExposure(db: Float, durationSeconds: Float) {
         if (!settings.nioshEnabled) return
+        
+        // Pause dose accumulation if self-noise or history playback is active
+        if (AudioBridge.isSelfNoiseActive || AudioBridge.isAppPlayingPlayback) {
+            return
+        }
 
         checkDailyReset()
 
@@ -69,12 +78,39 @@ class ExposureManager(context: Context) {
     }
 
     fun shouldNotify(): Boolean {
-        if (!settings.nioshEnabled || settings.doseNotifiedToday) return false
-        return cachedDose >= settings.nioshRatio
+        if (!settings.nioshEnabled) return false
+        
+        // Target Dose Alert
+        if (!settings.doseNotifiedToday && cachedDose >= settings.nioshRatio) {
+            return true
+        }
+        
+        // Critical 100% Alert
+        if (!settings.doseCriticalNotifiedToday && cachedDose >= 1.0f) {
+            return true
+        }
+        
+        return false
     }
 
     fun markNotified() {
-        settings.doseNotifiedToday = true
+        if (cachedDose >= 1.0f) {
+            settings.doseCriticalNotifiedToday = true
+        } else if (cachedDose >= settings.nioshRatio) {
+            settings.doseNotifiedToday = true
+        }
+        persist()
+    }
+
+    fun isCriticalDose(): Boolean = cachedDose >= 1.0f
+
+    fun reset() {
+        cachedDose = 0f
+        cachedBreakdown.clear()
+        settings.dailyDose = 0f
+        settings.doseNotifiedToday = false
+        settings.doseCriticalNotifiedToday = false
+        AudioBridge.currentDose = 0f
         persist()
     }
 

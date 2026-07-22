@@ -1,6 +1,6 @@
-- `[x]` Update `SpectrumCallback.kt` with `dbAlert`
-- `[x]` Update `AudioBridge.kt` & `AudioBridge.cpp` JNI signature
-- `[x]` Update `AudioEngine` (Native) to calculate `dbAlert`
-- `[x]` Update `AudioMonitorService.kt` to use `dbAlert` and fixed timing
-- `[x]` Update `AudioViewModel.kt` and `MicDiscoveryViewModel.kt` to match signature
-- `[x]` Verify responsive alerts in "Slow" mode
+- `[x]` Add storage and battery keys to `SettingsManager.kt`
+- `[x]` Implement `performAutoCleanup()` in `HistoryManager.kt`
+- `[x]` Update `AudioMonitorService.kt` with battery watcher and cleanup logic
+- `[x]` Update `SettingsScreen.kt` with Storage Management UI
+- `[x]` Verify storage cleanup and battery safeguard behavior
+- `[x]` Create walkthrough

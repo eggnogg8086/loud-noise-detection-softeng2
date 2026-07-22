@@ -129,6 +129,7 @@ class MicDiscoveryViewModel : ViewModel() {
             settings.selectedMicId = discoveredMicId
             settings.audioPreset = discoveredPreset
             settings.noiseFloorDb = noiseFloor
+            settings.isStereoHardware = discoveredIsStereo
             settings.micSetupCompleted = true
 
             state = SetupState.Finished(

@@ -43,6 +43,10 @@ fun SettingsScreen(
     var speakerCompensation by remember { mutableStateOf(settingsManager.speakerCompensationEnabled) }
     var noiseRejection by remember { mutableStateOf(settingsManager.intelligentNoiseRejection) }
     var integrationTime by remember { mutableStateOf(settingsManager.integrationTime) }
+    var allowNotifsOnHeadphones by remember { mutableStateOf(settingsManager.allowNotifsOnHeadphones) }
+    
+    var storageLimitDays by remember { mutableStateOf(settingsManager.storageLimitDays.toFloat()) }
+    var autoCleanupEnabled by remember { mutableStateOf(settingsManager.autoCleanupEnabled) }
     
     var locationEnabled by remember { 
         mutableStateOf(
@@ -200,6 +204,29 @@ fun SettingsScreen(
                     )
                     Text("Notify when you reach this ratio of your daily limit.", style = MaterialTheme.typography.bodySmall)
                 }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Alerts during Headphone Media")
+                        Text(
+                            "Allow safety notifications even when listening to music with headphones.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = allowNotifsOnHeadphones,
+                        onCheckedChange = {
+                            allowNotifsOnHeadphones = it
+                            settingsManager.allowNotifsOnHeadphones = it
+                        }
+                    )
+                }
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }
 
@@ -361,6 +388,69 @@ fun SettingsScreen(
                         Text(label)
                     }
                 }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            }
+
+            item {
+                Text("Storage Management", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Auto-Cleanup Old Audio")
+                        Text(
+                            "Automatically delete large audio files after a certain time.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = autoCleanupEnabled,
+                        onCheckedChange = {
+                            autoCleanupEnabled = it
+                            settingsManager.autoCleanupEnabled = it
+                        }
+                    )
+                }
+
+                if (autoCleanupEnabled) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    val daysOptions = listOf(1f, 3f, 7f, 30f)
+                    Text("Keep Recordings For: ${storageLimitDays.toInt()} Days", style = MaterialTheme.typography.bodyMedium)
+                    Slider(
+                        value = storageLimitDays,
+                        onValueChange = { newValue ->
+                            // Snap to nearest option
+                            val snapped = daysOptions.minBy { Math.abs(it - newValue) }
+                            storageLimitDays = snapped
+                            settingsManager.storageLimitDays = snapped.toInt()
+                        },
+                        valueRange = 1f..30f,
+                        steps = 28,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = { 
+                        val history = HistoryManager(context)
+                        history.deleteAllAudioFiles()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete All Audio Recordings")
+                }
+                Text(
+                    "This only deletes the large audio files. Your decibel history log will remain.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }

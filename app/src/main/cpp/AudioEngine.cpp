@@ -9,6 +9,8 @@
 AudioEngine::AudioEngine(SpectrumCallback cb)
         : mCallback(std::move(cb)),
           mInputBuffer(kFftSize, 0.f),
+          mWindowedBuffer(kFftSize, 0.f),
+          mSpectrumBuffer(kSpectrumSize, 0.f),
           mFftOutput(kSpectrumSize + 1),
           mCircularBuffer(kCircularBufferSize, 0.f)
 {
@@ -205,25 +207,29 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
             mBufferPos = 0;
 
             // Apply Hann window
-            std::vector<float> windowed(kFftSize);
             for (int j = 0; j < kFftSize; j++) {
-                windowed[j] = mInputBuffer[j] * mWindow[j];
+                mWindowedBuffer[j] = mInputBuffer[j] * mWindow[j];
             }
 
             // Run FFT
-            kiss_fftr(mFftCfg, windowed.data(), mFftOutput.data());
+            kiss_fftr(mFftCfg, mWindowedBuffer.data(), mFftOutput.data());
 
             // Convert to dB spectrum for visualization AND calculate dBA SPL
-            std::vector<float> spectrum(kSpectrumSize);
             float sumWeightedSq = 0;
+            float sumUnweightedSq = 0;
 
             for (int j = 0; j < kSpectrumSize; j++) {
                 float re = mFftOutput[j].r;
                 float im = mFftOutput[j].i;
-                float magnitude = sqrtf(re * re + im * im) / kFftSize;
+                float rawMagnitude = sqrtf(re * re + im * im) / kFftSize;
 
                 // Apply frequency compensation (hardware calibration)
-                magnitude *= mFreqCompensation[j];
+                rawMagnitude *= mFreqCompensation[j];
+
+                float magnitude = rawMagnitude;
+
+                // Sum unweighted energy
+                sumUnweightedSq += rawMagnitude * rawMagnitude;
 
                 // Apply A-Weighting if enabled
                 if (mUseAWeighting) {
@@ -234,16 +240,24 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
                 sumWeightedSq += magnitude * magnitude;
 
                 float db = 20.f * log10f(fmaxf(magnitude, 1e-10f));
-                spectrum[j] = fmaxf(0.f, fminf(70.f, db + 90.f));
+                mSpectrumBuffer[j] = fmaxf(0.f, fminf(70.f, db + 90.f));
             }
 
             // Calculate overall SPL
             // We multiply by 2 because we only sum half the spectrum (real FFT)
+            // We apply +4.26dB compensation for the Hann window power loss (8/3 factor in power domain)
+            float windowCompensation = 4.26f;
             float rmsWeighted = sqrtf(sumWeightedSq * 2.0f);
+            float rmsUnweighted = sqrtf(sumUnweightedSq * 2.0f);
 
             // Reference adjusted: MicrophoneInfo.getSensitivity() is dBFS for 94dB SPL.
             float effectiveSensitivity = (mSensitivity < -900.f) ? -37.0f : mSensitivity;
-            float dbSPL = 20.f * log10f(fmaxf(rmsWeighted, 1e-10f)) + 94.f - effectiveSensitivity;
+
+            float dbSPL = 20.f * log10f(fmaxf(rmsWeighted, 1e-10f)) + 94.f - effectiveSensitivity + windowCompensation;
+            float dbUnweighted = 20.f * log10f(fmaxf(rmsUnweighted, 1e-10f)) + 94.f - effectiveSensitivity + windowCompensation;
+
+            // Calculate A-Weighting Delta for this specific audio content
+            float weightingDelta = dbSPL - dbUnweighted;
 
             // Apply Manual Calibration Offset
             dbSPL += mCalibrationOffset;
@@ -276,8 +290,10 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
             float rmsL = sqrtf(mLeftSumSq / mEnergyCount);
             float rmsR = sqrtf(mRightSumSq / mEnergyCount);
 
-            float dbL = 20.f * log10f(fmaxf(rmsL, 1e-10f)) + 94.f - effectiveSensitivity + mCalibrationOffset;
-            float dbR = 20.f * log10f(fmaxf(rmsR, 1e-10f)) + 94.f - effectiveSensitivity + mCalibrationOffset;
+            // Align VU meters with SPL meter.
+            // We use the same baseline and apply the weighting delta found in frequency domain.
+            float dbL = 20.f * log10f(fmaxf(rmsL, 1e-10f)) + 94.f - effectiveSensitivity + windowCompensation + mCalibrationOffset + weightingDelta;
+            float dbR = 20.f * log10f(fmaxf(rmsR, 1e-10f)) + 94.f - effectiveSensitivity + windowCompensation + mCalibrationOffset + weightingDelta;
 
             float balance = 0.0f;
             if (rmsL + rmsR > 1e-6f) {
@@ -289,7 +305,7 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
             mRightSumSq = 0;
             mEnergyCount = 0;
 
-            mCallback(spectrum.data(), kSpectrumSize, dbSPL, dbRaw, dbAlert, dbL, dbR, balance, mRejectionActive, channelCount);
+            mCallback(mSpectrumBuffer.data(), kSpectrumSize, dbSPL, dbRaw, dbAlert, dbL, dbR, balance, mRejectionActive, channelCount);
             mRejectionActive = false; // Reset for next buffer
         }
     }
