@@ -76,8 +76,12 @@ represents the recommended maximum daily exposure under the NIOSH model.
 * Android Notifications
 
 ### Audio Processing
+Low-level audio capture is handled using **Oboe**, Google's C++ library for high-performance audio on Android.
+The native `noisecapture` library uses Oboe to receive microphone audio samples, process the captured audio, calculate sound levels, and generate frequency-spectrum data.
+Communication between the Kotlin application and the native C++ layer is performed through JNI using `AudioBridge`.
 
-* C / C++
+* C++
+* Oboe
 * JNI
 * Native audio capture
 * Fast Fourier Transform (FFT)
